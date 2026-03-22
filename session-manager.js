@@ -40,4 +40,7 @@
   };
   manager.ensure();
   global.KedrixSessionManager = manager;
+  global.getSessionId = function(){
+    try { return manager.getSessionId(); } catch(_e) { return null; }
+  };
 })(window);

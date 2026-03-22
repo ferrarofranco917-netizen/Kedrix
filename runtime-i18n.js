@@ -159,11 +159,5 @@
   };
 
   global.KedrixI18n = api;
-  global.resolveRuntimeLang = function(appLike) {
-    return resolveRuntimeLanguage(appLike);
-  };
-  global.resolveBootstrapLang = function() {
-    return resolveBootstrapLanguage();
-  };
   boot();
 })(window);
