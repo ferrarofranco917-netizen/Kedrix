@@ -82,9 +82,6 @@
     if (document.documentElement) {
       document.documentElement.setAttribute('lang', normalized);
     }
-    try {
-      window.dispatchEvent(new CustomEvent('kedrix:language-resolved', { detail: { language: normalized } }));
-    } catch (_err) {}
     return normalized;
   }
 
@@ -162,5 +159,11 @@
   };
 
   global.KedrixI18n = api;
+  global.resolveRuntimeLang = function(appLike) {
+    return resolveRuntimeLanguage(appLike);
+  };
+  global.resolveBootstrapLang = function() {
+    return resolveBootstrapLanguage();
+  };
   boot();
 })(window);
