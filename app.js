@@ -1,5 +1,9 @@
-const KEDRIX_BUILD = '20260322_refactor_i18n_v1a';
-const KEDRIX_RELEASE_CHANNEL = 'beta';
+const KEDRIX_BUILD = (window.KedrixRuntimeConfig && typeof window.KedrixRuntimeConfig.getBuild === 'function')
+    ? window.KedrixRuntimeConfig.getBuild()
+    : '20260322_refactor_i18n_v1a';
+const KEDRIX_RELEASE_CHANNEL = (window.KedrixRuntimeConfig && typeof window.KedrixRuntimeConfig.getChannel === 'function')
+    ? window.KedrixRuntimeConfig.getChannel()
+    : 'beta';
 const KEDRIX_FEEDBACK_EMAIL = 'feedback@kedrix.ai';
 
 function resolveRuntimeLang(appLike) {
@@ -14146,7 +14150,9 @@ document.addEventListener("DOMContentLoaded", ()=>{
   if (window.__KEDRIX_TRACKING_PATCH_APPLIED__) return;
   window.__KEDRIX_TRACKING_PATCH_APPLIED__ = true;
 
-  const KEDRIX_TRACKING_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzgKv6VM1K--AhdtFhAuGgm7rscoQCTf7vPFljAUr6njQRP_s6oyzB_UEIG5xWi0Se_4A/exec';
+  const KEDRIX_TRACKING_ENDPOINT = (window.KedrixRuntimeConfig && typeof window.KedrixRuntimeConfig.getEndpoint === 'function')
+    ? window.KedrixRuntimeConfig.getEndpoint('tracking')
+    : 'https://script.google.com/macros/s/AKfycbzgKv6VM1K--AhdtFhAuGgm7rscoQCTf7vPFljAUr6njQRP_s6oyzB_UEIG5xWi0Se_4A/exec';
 
   const normalizeEndpoint = (value) => {
     const raw = String(value || '').trim();

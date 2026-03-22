@@ -61,6 +61,10 @@ class KedrixLicense {
     }
 
     resolveEndpoint() {
+        if (window.KedrixRuntimeConfig && typeof window.KedrixRuntimeConfig.getEndpoint === 'function') {
+            const endpoint = window.KedrixRuntimeConfig.getEndpoint('registry');
+            if (endpoint) return endpoint;
+        }
         const meta = document.querySelector('meta[name="kedrix-beta-registry-endpoint"]');
         if (meta && meta.content) return meta.content.trim();
         return '';

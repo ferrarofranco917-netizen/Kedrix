@@ -1,11 +1,17 @@
-const BW_SW_VERSION = '20260322_ghclean1';
+const BW_SW_VERSION = '20260322_cf1';
 const BW_CACHE = `kedrix-cache-${BW_SW_VERSION}`;
 const BW_CORE_ASSETS = [
   './',
   './index.html',
   './style.css',
-  './app.js',
+  './runtime-config.js',
+  './runtime-i18n.js',
+  './session-manager.js',
+  './license-guard.js',
+  './api-client.js',
+  './tracking-hooks.js',
   './license-system.js',
+  './app.js',
   './tracking.js',
   './guided-activation.js',
   './manifest.json',
@@ -16,15 +22,36 @@ const BW_CORE_ASSETS = [
   './assets/modern-logo-kedrix-pfe.svg'
 ];
 
+function normalizeUrl(input) {
+  const url = new URL(input, self.location.origin);
+  url.hash = '';
+  url.search = '';
+  return url.toString();
+}
+
+function isCacheableRequest(request) {
+  if (!request || request.method !== 'GET') return false;
+  const url = new URL(request.url);
+  return url.origin === self.location.origin && /^https?:$/.test(url.protocol);
+}
+
+async function putInCache(cache, request, response) {
+  if (!response || !response.ok) return;
+  const cacheKey = normalizeUrl(request.url || request);
+  await cache.put(cacheKey, response.clone());
+}
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(BW_CACHE)
-      .then((cache) => cache.addAll(BW_CORE_ASSETS))
-      .catch((err) => {
-        console.warn('[Kedrix SW] Precaching parziale fallito:', err);
-      })
-      .then(() => self.skipWaiting())
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(BW_CACHE);
+    await Promise.allSettled(BW_CORE_ASSETS.map(async (asset) => {
+      const response = await fetch(asset, { cache: 'no-store' });
+      if (response && response.ok) {
+        await cache.put(normalizeUrl(asset), response);
+      }
+    }));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (event) => {
@@ -36,11 +63,6 @@ self.addEventListener('activate', (event) => {
         .map((key) => caches.delete(key))
     );
     await self.clients.claim();
-
-    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const client of clients) {
-      client.postMessage({ type: 'BW_SW_ACTIVATED', version: BW_SW_VERSION });
-    }
   })());
 });
 
@@ -52,42 +74,36 @@ self.addEventListener('message', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const request = event.request;
+  if (!isCacheableRequest(request)) return;
 
-  if (request.method !== 'GET') return;
-
-  const url = new URL(request.url);
-
-  if (url.origin !== self.location.origin) return;
-
-  if (request.mode === 'navigate') {
-    event.respondWith((async () => {
-      try {
-        const networkResponse = await fetch(request);
-        const cache = await caches.open(BW_CACHE);
-        cache.put('./index.html', networkResponse.clone());
-        return networkResponse;
-      } catch {
-        const cachedResponse = await caches.match('./index.html');
-        return cachedResponse || Response.error();
-      }
-    })());
-    return;
-  }
+  const normalizedRequestUrl = normalizeUrl(request.url);
+  const isNavigation = request.mode === 'navigate' || request.destination === 'document';
 
   event.respondWith((async () => {
-    const cachedResponse = await caches.match(request, { ignoreSearch: false });
+    const cache = await caches.open(BW_CACHE);
+
+    if (isNavigation) {
+      try {
+        const networkResponse = await fetch(request, { cache: 'no-store' });
+        await putInCache(cache, request, networkResponse);
+        return networkResponse;
+      } catch (_err) {
+        const cachedResponse = await cache.match(normalizedRequestUrl)
+          || await cache.match(normalizeUrl('./index.html'))
+          || await cache.match(normalizeUrl('./'));
+        return cachedResponse || Response.error();
+      }
+    }
+
+    const cachedResponse = await cache.match(normalizedRequestUrl);
     if (cachedResponse) return cachedResponse;
 
     try {
-      const networkResponse = await fetch(request);
-      if (networkResponse && networkResponse.ok && !url.pathname.endsWith('.map')) {
-        const cache = await caches.open(BW_CACHE);
-        cache.put(request, networkResponse.clone());
-      }
+      const networkResponse = await fetch(request, { cache: 'no-store' });
+      await putInCache(cache, request, networkResponse);
       return networkResponse;
-    } catch {
-      const fallbackResponse = await caches.match(url.pathname, { ignoreSearch: true });
-      return fallbackResponse || Response.error();
+    } catch (_err) {
+      return cachedResponse || Response.error();
     }
   })());
 });
