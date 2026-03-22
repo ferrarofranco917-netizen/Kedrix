@@ -158,7 +158,15 @@
     boot
   };
 
+
+  global.resolveRuntimeLang = function(appLike) {
+    return resolveRuntimeLanguage(appLike);
+  };
+
+  global.resolveRuntimeLangLocal = function(appLike) {
+    return resolveRuntimeLanguage(appLike);
+  };
+
   global.KedrixI18n = api;
-  global.resolveRuntimeLang = global.resolveRuntimeLang || resolveRuntimeLanguage;
   boot();
 })(window);

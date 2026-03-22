@@ -40,4 +40,13 @@
   };
   manager.ensure();
   global.KedrixSessionManager = manager;
+  global.getSessionId = function(){
+    try {
+      return global.KedrixSessionManager && typeof global.KedrixSessionManager.getSessionId === 'function'
+        ? global.KedrixSessionManager.getSessionId()
+        : null;
+    } catch(_e) {
+      return null;
+    }
+  };
 })(window);

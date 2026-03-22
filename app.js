@@ -7,32 +7,26 @@ function resolveRuntimeLang(appLike) {
         if (window.KedrixI18n && typeof window.KedrixI18n.resolveRuntimeLanguage === 'function') {
             return window.KedrixI18n.resolveRuntimeLanguage(appLike);
         }
-    } catch (_e) {}
-    const htmlLang = String(document.documentElement?.lang || '').trim().toLowerCase();
-    if (htmlLang) return htmlLang;
-    try {
-        const selectLang = document.getElementById('languageSelect')?.value;
-        if (selectLang) return String(selectLang).trim().toLowerCase();
-    } catch (_e) {}
-    return 'it';
+        const htmlLang = String(document.documentElement?.lang || '').trim().toLowerCase();
+        return htmlLang || 'it';
+    } catch (_e) {
+        return 'it';
+    }
 }
-window.resolveRuntimeLang = window.resolveRuntimeLang || resolveRuntimeLang;
+
+function resolveRuntimeLangLocal(appLike) {
+    return resolveRuntimeLang(appLike);
+}
 
 function getSessionId() {
     try {
-        if (window.KedrixSessionManager && typeof window.KedrixSessionManager.getSessionId === 'function') {
-            return window.KedrixSessionManager.getSessionId();
-        }
-    } catch (_e) {}
-    try {
-        const key = 'kedrix_session_v1';
-        const raw = localStorage.getItem(key);
-        const parsed = raw ? JSON.parse(raw) : null;
-        if (parsed && parsed.id) return parsed.id;
-    } catch (_e) {}
-    return 'session_unavailable';
+        return window.KedrixSessionManager && typeof window.KedrixSessionManager.getSessionId === 'function'
+            ? window.KedrixSessionManager.getSessionId()
+            : null;
+    } catch (_e) {
+        return null;
+    }
 }
-window.getSessionId = window.getSessionId || getSessionId;
 // ========= LOCALE MAP GLOBALE =========
 const LOCALE_MAP = { 
     it: 'it-IT', 
@@ -3283,7 +3277,7 @@ detectCsvDelimiter(text, fallback = ',') {
     }
 
     getDemoCustomCategories() {
-        const lang = resolveRuntimeLangLocal(this);
+        const lang = resolveRuntimeLang(this);
         const map = {
             it: { home: 'Casa', kids: 'Bambini', work: 'Lavoro' },
             en: { home: 'Home', kids: 'Kids', work: 'Work' },
@@ -3313,7 +3307,7 @@ detectCsvDelimiter(text, fallback = ',') {
 
         getDemoData() {
         const today = new Date();
-        const lang = resolveRuntimeLangLocal(this);
+        const lang = resolveRuntimeLang(this);
         const demoText = {
             it: {
                 income: 'Stipendio',
@@ -7919,7 +7913,7 @@ const dateStr = targetDate.toLocaleDateString(locale, {
     }
 
     getPrintTemplateLabels() {
-        const lang = resolveRuntimeLangLocal(this);
+        const lang = resolveRuntimeLang(this);
         const map = {
             it: {
                 coverEyebrow: 'FINANCIAL INTELLIGENCE REPORT',
@@ -9069,7 +9063,7 @@ formatDaysToYearsMonthsDays(days) {
     if (!countEl) return;
     
     if (this.searchTerm || this.searchCategoryFilter !== 'all') {
-        const lang = resolveRuntimeLangLocal(this);
+        const lang = resolveRuntimeLang(this);
         if (lang === 'it') {
             countEl.textContent = `📊 Mostrando ${filteredCount} di ${totalCount} spese`;
         } else if (lang === 'en') {
@@ -9669,7 +9663,7 @@ formatDaysToYearsMonthsDays(days) {
 
     formatCurrency(amount) {
         const value = Number(amount || 0);
-        const lang = resolveRuntimeLangLocal(this);
+        const lang = resolveRuntimeLang(this);
         const localeMap = { it: 'it-IT', en: 'en-GB', es: 'es-ES', fr: 'fr-FR' };
         const locale = localeMap[lang] || 'it-IT';
         try {
@@ -12676,7 +12670,13 @@ function applyFinalI18nOverrides(app) {
         }
     };
 
-    const resolveRuntimeLangLocal = window.resolveRuntimeLang || resolveRuntimeLang;
+    function resolveRuntimeLang(app) {
+        if (window.KedrixI18n && typeof window.KedrixI18n.resolveRuntimeLanguage === 'function') {
+            return window.KedrixI18n.resolveRuntimeLanguage(app);
+        }
+        const htmlLang = String(document.documentElement?.lang || '').trim().toLowerCase();
+        return htmlLang || 'it';
+    }
 
     function getCopy(lang, key) {
         const bucket = ACTIVATION_COPY[lang] || ACTIVATION_COPY.it;
@@ -12901,7 +12901,7 @@ function applyFinalI18nOverrides(app) {
         const modal = document.getElementById('kedrixActivationModal');
         if (modal) modal.hidden = true;
         this.renderActivationCard(true);
-        this.showToast(getCopy(resolveRuntimeLangLocal(this), 'firstValueToast'), 'success');
+        this.showToast(getCopy(resolveRuntimeLang(this), 'firstValueToast'), 'success');
     };
 
     Kedrix.prototype.renderActivationCard = function(force) {
@@ -12923,7 +12923,7 @@ function applyFinalI18nOverrides(app) {
             card.hidden = true;
             return;
         }
-        const lang = resolveRuntimeLangLocal(this);
+        const lang = resolveRuntimeLang(this);
         const title = completed ? getCopy(lang, 'cardTitleActive') : getCopy(lang, 'cardTitleStart');
         const text = stage === 'needs_income'
             ? getCopy(lang, 'cardTextStart')
@@ -12994,7 +12994,7 @@ function applyFinalI18nOverrides(app) {
             document.body.appendChild(modal);
         }
 
-        const lang = resolveRuntimeLangLocal(this);
+        const lang = resolveRuntimeLang(this);
         const needsIncome = stage === 'needs_income';
         const primaryLabel = needsIncome ? getCopy(lang, 'modalPrimary') : getCopy(lang, 'ctaExpense');
         const title = needsIncome ? getCopy(lang, 'modalTitle') : getCopy(lang, 'expenseModalTitle');
@@ -13049,7 +13049,7 @@ function applyFinalI18nOverrides(app) {
         if (!sessionStorage.getItem(ACTIVATION_SESSION_KEY)) {
             sessionStorage.setItem(ACTIVATION_SESSION_KEY, String(Date.now()));
             if (completed) {
-                this.showToast(getCopy(resolveRuntimeLangLocal(this), 'sessionRecovered'), 'info');
+                this.showToast(getCopy(resolveRuntimeLang(this), 'sessionRecovered'), 'info');
                 this.trackActivationEvent('activation_session_recovered');
             }
         }
