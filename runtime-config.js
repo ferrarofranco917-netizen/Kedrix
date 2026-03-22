@@ -6,8 +6,8 @@
     serviceWorkerPath: './sw.js',
     scope: './',
     endpoints: {
-      registry: 'https://script.google.com/macros/s/AKfycbzgKv6VM1K--AhdtFhAuGgm7rscoQCTf7vPFljAUr6njQRP_s6oyzB_UEIG5xWi0Se_4A/exec',
-      tracking: 'https://script.google.com/macros/s/AKfycbzgKv6VM1K--AhdtFhAuGgm7rscoQCTf7vPFljAUr6njQRP_s6oyzB_UEIG5xWi0Se_4A/exec'
+      registry: 'https://script.google.com/macros/s/AKfycbzNS4sNBcQ-E6c4AVzIL2QdboyQIW6rXs8-oiJ9AbkTIlnOVX1SXLYPBY_PpF7pYjF_FA/exec',
+      tracking: 'https://script.google.com/macros/s/AKfycbzNS4sNBcQ-E6c4AVzIL2QdboyQIW6rXs8-oiJ9AbkTIlnOVX1SXLYPBY_PpF7pYjF_FA/exec'
     }
   };
 
@@ -28,6 +28,35 @@
       return '';
     }
   }
+  const CURRENT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzNS4sNBcQ-E6c4AVzIL2QdboyQIW6rXs8-oiJ9AbkTIlnOVX1SXLYPBY_PpF7pYjF_FA/exec';
+  const LEGACY_ENDPOINTS = new Set([
+    'https://script.google.com/macros/s/AKfycbzgKv6VM1K--AhdtFhAuGgm7rscoQCTf7vPFljAUr6njQRP_s6oyzB_UEIG5xWi0Se_4A/exec'
+  ]);
+
+  function normalizeEndpoint(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (/\/exec(?:\?|#|$)/.test(raw)) return raw;
+    if (/script\.google\.com\/macros\/s\//.test(raw)) return raw.replace(/\/?$/, '/exec');
+    return raw;
+  }
+
+  function isLegacyEndpoint(value) {
+    const normalized = normalizeEndpoint(value);
+    return LEGACY_ENDPOINTS.has(normalized);
+  }
+
+  function readEndpointOverride(key) {
+    const value = readStorage(key);
+    const normalized = normalizeEndpoint(value);
+    if (!normalized) return '';
+    if (isLegacyEndpoint(normalized)) {
+      try { localStorage.removeItem(key); } catch (_err) {}
+      return '';
+    }
+    return normalized;
+  }
+
 
   const api = {
     getBuild() {
@@ -57,14 +86,14 @@
 
       const storageCandidates = storageKeys[normalizedKind] || [];
       for (const key of storageCandidates) {
-        const value = readStorage(key);
+        const value = readEndpointOverride(key);
         if (value) return value;
       }
 
       const metaValue = readMeta(metaKeys[normalizedKind] || '');
       if (metaValue) return metaValue;
 
-      return CONFIG.endpoints[normalizedKind] || '';
+      return CONFIG.endpoints[normalizedKind] || CURRENT_ENDPOINT || '';
     }
   };
 

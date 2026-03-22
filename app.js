@@ -14152,7 +14152,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
   const KEDRIX_TRACKING_ENDPOINT = (window.KedrixRuntimeConfig && typeof window.KedrixRuntimeConfig.getEndpoint === 'function')
     ? window.KedrixRuntimeConfig.getEndpoint('tracking')
-    : 'https://script.google.com/macros/s/AKfycbzgKv6VM1K--AhdtFhAuGgm7rscoQCTf7vPFljAUr6njQRP_s6oyzB_UEIG5xWi0Se_4A/exec';
+    : 'https://script.google.com/macros/s/AKfycbzNS4sNBcQ-E6c4AVzIL2QdboyQIW6rXs8-oiJ9AbkTIlnOVX1SXLYPBY_PpF7pYjF_FA/exec';
 
   const normalizeEndpoint = (value) => {
     const raw = String(value || '').trim();
@@ -14162,24 +14162,40 @@ document.addEventListener("DOMContentLoaded", ()=>{
     return raw;
   };
 
+  const LEGACY_TRACKING_ENDPOINTS = new Set([
+    'https://script.google.com/macros/s/AKfycbzgKv6VM1K--AhdtFhAuGgm7rscoQCTf7vPFljAUr6njQRP_s6oyzB_UEIG5xWi0Se_4A/exec'
+  ]);
+
   const getEndpoint = () => {
+    const runtimeEndpoint = (window.KedrixRuntimeConfig && typeof window.KedrixRuntimeConfig.getEndpoint === 'function')
+      ? window.KedrixRuntimeConfig.getEndpoint('tracking')
+      : '';
+
     const candidates = [
+      runtimeEndpoint,
       window.KEDRIX_REGISTRY_ENDPOINT,
       window.KEDRIX_TRACKING_ENDPOINT,
+      document.documentElement && document.documentElement.getAttribute('data-kedrix-endpoint'),
       localStorage.getItem('kedrix_registry_endpoint'),
       localStorage.getItem('kedrix_tracking_endpoint'),
-      document.documentElement && document.documentElement.getAttribute('data-kedrix-endpoint'),
       KEDRIX_TRACKING_ENDPOINT
     ];
 
     for (const candidate of candidates) {
       const normalized = normalizeEndpoint(candidate);
-      if (normalized) {
+      if (!normalized) continue;
+      if (LEGACY_TRACKING_ENDPOINTS.has(normalized)) {
         try {
-          localStorage.setItem('kedrix_registry_endpoint', normalized);
+          if (localStorage.getItem('kedrix_registry_endpoint') === normalized) localStorage.removeItem('kedrix_registry_endpoint');
+          if (localStorage.getItem('kedrix_tracking_endpoint') === normalized) localStorage.removeItem('kedrix_tracking_endpoint');
         } catch (_err) {}
-        return normalized;
+        continue;
       }
+      try {
+        localStorage.setItem('kedrix_registry_endpoint', normalized);
+        localStorage.setItem('kedrix_tracking_endpoint', normalized);
+      } catch (_err) {}
+      return normalized;
     }
 
     return '';
