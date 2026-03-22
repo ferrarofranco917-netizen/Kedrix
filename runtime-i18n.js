@@ -159,5 +159,6 @@
   };
 
   global.KedrixI18n = api;
+  global.resolveRuntimeLang = global.resolveRuntimeLang || resolveRuntimeLanguage;
   boot();
 })(window);

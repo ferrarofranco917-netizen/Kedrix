@@ -1,6 +1,38 @@
-const KEDRIX_BUILD = '20260322_refactor_i18n_v1';
+const KEDRIX_BUILD = '20260322_refactor_i18n_v1a';
 const KEDRIX_RELEASE_CHANNEL = 'beta';
 const KEDRIX_FEEDBACK_EMAIL = 'feedback@kedrix.ai';
+
+function resolveRuntimeLang(appLike) {
+    try {
+        if (window.KedrixI18n && typeof window.KedrixI18n.resolveRuntimeLanguage === 'function') {
+            return window.KedrixI18n.resolveRuntimeLanguage(appLike);
+        }
+    } catch (_e) {}
+    const htmlLang = String(document.documentElement?.lang || '').trim().toLowerCase();
+    if (htmlLang) return htmlLang;
+    try {
+        const selectLang = document.getElementById('languageSelect')?.value;
+        if (selectLang) return String(selectLang).trim().toLowerCase();
+    } catch (_e) {}
+    return 'it';
+}
+window.resolveRuntimeLang = window.resolveRuntimeLang || resolveRuntimeLang;
+
+function getSessionId() {
+    try {
+        if (window.KedrixSessionManager && typeof window.KedrixSessionManager.getSessionId === 'function') {
+            return window.KedrixSessionManager.getSessionId();
+        }
+    } catch (_e) {}
+    try {
+        const key = 'kedrix_session_v1';
+        const raw = localStorage.getItem(key);
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed && parsed.id) return parsed.id;
+    } catch (_e) {}
+    return 'session_unavailable';
+}
+window.getSessionId = window.getSessionId || getSessionId;
 // ========= LOCALE MAP GLOBALE =========
 const LOCALE_MAP = { 
     it: 'it-IT', 
@@ -3251,7 +3283,7 @@ detectCsvDelimiter(text, fallback = ',') {
     }
 
     getDemoCustomCategories() {
-        const lang = resolveRuntimeLang(this);
+        const lang = resolveRuntimeLangLocal(this);
         const map = {
             it: { home: 'Casa', kids: 'Bambini', work: 'Lavoro' },
             en: { home: 'Home', kids: 'Kids', work: 'Work' },
@@ -3281,7 +3313,7 @@ detectCsvDelimiter(text, fallback = ',') {
 
         getDemoData() {
         const today = new Date();
-        const lang = resolveRuntimeLang(this);
+        const lang = resolveRuntimeLangLocal(this);
         const demoText = {
             it: {
                 income: 'Stipendio',
@@ -4225,9 +4257,6 @@ if (excelHeaderSelectEl) {
         this.updatePeriodInfo();
         this.updateHomeHeroMetrics();
         this.updateWiseForecastHome();
-        try { this.renderActivationCard && this.renderActivationCard(true); } catch (_e) {}
-        try { this.showActivationModal && this.showActivationModal(true); } catch (_e) {}
-        try { this.renderWiseForecastCard && this.renderWiseForecastCard(); } catch (_e) {}
         this.applyPrivacyState();
     }
                 
@@ -7890,7 +7919,7 @@ const dateStr = targetDate.toLocaleDateString(locale, {
     }
 
     getPrintTemplateLabels() {
-        const lang = resolveRuntimeLang(this);
+        const lang = resolveRuntimeLangLocal(this);
         const map = {
             it: {
                 coverEyebrow: 'FINANCIAL INTELLIGENCE REPORT',
@@ -9040,7 +9069,7 @@ formatDaysToYearsMonthsDays(days) {
     if (!countEl) return;
     
     if (this.searchTerm || this.searchCategoryFilter !== 'all') {
-        const lang = resolveRuntimeLang(this);
+        const lang = resolveRuntimeLangLocal(this);
         if (lang === 'it') {
             countEl.textContent = `📊 Mostrando ${filteredCount} di ${totalCount} spese`;
         } else if (lang === 'en') {
@@ -9640,7 +9669,7 @@ formatDaysToYearsMonthsDays(days) {
 
     formatCurrency(amount) {
         const value = Number(amount || 0);
-        const lang = resolveRuntimeLang(this);
+        const lang = resolveRuntimeLangLocal(this);
         const localeMap = { it: 'it-IT', en: 'en-GB', es: 'es-ES', fr: 'fr-FR' };
         const locale = localeMap[lang] || 'it-IT';
         try {
@@ -12647,13 +12676,7 @@ function applyFinalI18nOverrides(app) {
         }
     };
 
-    function resolveRuntimeLang(app) {
-        if (window.KedrixI18n && typeof window.KedrixI18n.resolveRuntimeLanguage === 'function') {
-            return window.KedrixI18n.resolveRuntimeLanguage(app);
-        }
-        const htmlLang = String(document.documentElement?.lang || '').trim().toLowerCase();
-        return htmlLang || 'it';
-    }
+    const resolveRuntimeLangLocal = window.resolveRuntimeLang || resolveRuntimeLang;
 
     function getCopy(lang, key) {
         const bucket = ACTIVATION_COPY[lang] || ACTIVATION_COPY.it;
@@ -12878,7 +12901,7 @@ function applyFinalI18nOverrides(app) {
         const modal = document.getElementById('kedrixActivationModal');
         if (modal) modal.hidden = true;
         this.renderActivationCard(true);
-        this.showToast(getCopy(resolveRuntimeLang(this), 'firstValueToast'), 'success');
+        this.showToast(getCopy(resolveRuntimeLangLocal(this), 'firstValueToast'), 'success');
     };
 
     Kedrix.prototype.renderActivationCard = function(force) {
@@ -12900,7 +12923,7 @@ function applyFinalI18nOverrides(app) {
             card.hidden = true;
             return;
         }
-        const lang = resolveRuntimeLang(this);
+        const lang = resolveRuntimeLangLocal(this);
         const title = completed ? getCopy(lang, 'cardTitleActive') : getCopy(lang, 'cardTitleStart');
         const text = stage === 'needs_income'
             ? getCopy(lang, 'cardTextStart')
@@ -12971,7 +12994,7 @@ function applyFinalI18nOverrides(app) {
             document.body.appendChild(modal);
         }
 
-        const lang = resolveRuntimeLang(this);
+        const lang = resolveRuntimeLangLocal(this);
         const needsIncome = stage === 'needs_income';
         const primaryLabel = needsIncome ? getCopy(lang, 'modalPrimary') : getCopy(lang, 'ctaExpense');
         const title = needsIncome ? getCopy(lang, 'modalTitle') : getCopy(lang, 'expenseModalTitle');
@@ -13026,7 +13049,7 @@ function applyFinalI18nOverrides(app) {
         if (!sessionStorage.getItem(ACTIVATION_SESSION_KEY)) {
             sessionStorage.setItem(ACTIVATION_SESSION_KEY, String(Date.now()));
             if (completed) {
-                this.showToast(getCopy(resolveRuntimeLang(this), 'sessionRecovered'), 'info');
+                this.showToast(getCopy(resolveRuntimeLangLocal(this), 'sessionRecovered'), 'info');
                 this.trackActivationEvent('activation_session_recovered');
             }
         }
@@ -13605,15 +13628,54 @@ Kedrix.prototype.calculateWiseForecastAdvanced = function(){
 };
 
 Kedrix.prototype.renderWiseForecastCard = function(){
-    // Micropatch chirurgica: non riscrivere la forecast card home con HTML alternativo.
-    // Il DOM statico di index.html e updateWiseForecastHome() sono il path coerente per i18n runtime.
-    try {
-        if (typeof this.updateWiseForecastHome === 'function') {
-            this.updateWiseForecastHome();
-        }
-    } catch (e) {
-        console.warn("WiseForecast render sync error", e);
-    }
+
+    const el = document.getElementById("wiseForecastCard");
+    if(!el) return;
+
+    const data = this.calculateWiseForecastAdvanced();
+    if(!data) return;
+
+    el.innerHTML = `
+        <div class="bw-card">
+            <h3>${this.t('wiseForecastTitle')}</h3>
+
+            <div class="bw-forecast-main">
+                <div class="bw-forecast-value">€ ${data.predictedEnd.toFixed(2)}</div>
+                <div class="bw-forecast-risk ${data.risk}">${data.riskLabel}</div>
+            </div>
+
+            <div class="bw-forecast-grid">
+                <div>${this.t('wiseForecastAdvancedDailyAverage')}</div>
+                <div>€ ${data.avgDaily.toFixed(2)}</div>
+
+                <div>${this.t('wiseForecastAdvancedDaysRemaining')}</div>
+                <div>${data.daysRemaining}</div>
+
+                <div>${this.t('wiseForecastAdvancedFixedPlanned')}</div>
+                <div>€ ${data.predictedFixed.toFixed(2)}</div>
+            </div>
+
+            <div class="bw-forecast-sim">
+                <label>${this.t('wiseForecastAdvancedSimulateReduction')}</label>
+                <input type="range" id="wfSlider" min="0" max="10" step="1" value="0">
+                <div id="wfSimResult"></div>
+            </div>
+        </div>
+    `;
+
+    const slider = el.querySelector("#wfSlider");
+    const sim = el.querySelector("#wfSimResult");
+
+    const renderSimulation = () => {
+        const reduce = Number(slider.value);
+        const newAvg = Math.max(0,data.avgDaily - reduce);
+        const newPred = data.currentBalance - (newAvg * data.daysRemaining) - data.predictedFixed;
+        sim.innerHTML = `${this.t('wiseForecastAdvancedNewForecast')}: € ${newPred.toFixed(2)}`;
+    };
+
+    slider.addEventListener("input", renderSimulation);
+    renderSimulation();
+
 };
 
 // Hook render
