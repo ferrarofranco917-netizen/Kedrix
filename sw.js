@@ -1,4 +1,4 @@
-const BW_SW_VERSION = '20260322v_refactor_i18n_v2';
+const BW_SW_VERSION = '20260322_ghclean1';
 const BW_CACHE = `kedrix-cache-${BW_SW_VERSION}`;
 const BW_CORE_ASSETS = [
   './',
@@ -8,7 +8,6 @@ const BW_CORE_ASSETS = [
   './license-system.js',
   './tracking.js',
   './guided-activation.js',
-  './runtime-i18n.js',
   './manifest.json',
   './assets/icon-192.png',
   './assets/icon-512.png',
