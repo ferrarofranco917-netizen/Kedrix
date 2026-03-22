@@ -6,9 +6,9 @@
     serviceWorkerPath: './sw.js',
     scope: './',
     endpoints: {
-      registry: 'https://script.google.com/macros/s/AKfycbzNS4sNBcQ-E6c4AVzIL2QdboyQIW6rXs8-oiJ9AbkTIlnOVX1SXLYPBY_PpF7pYjF_FA/exec',
-      tracking: 'https://script.google.com/macros/s/AKfycbzNS4sNBcQ-E6c4AVzIL2QdboyQIW6rXs8-oiJ9AbkTIlnOVX1SXLYPBY_PpF7pYjF_FA/exec'
-    }
+  registry: 'https://script.google.com/macros/s/AKfycbz89cWPWlNihcLw9jpZpwgTBtcLb99u4m9wvjjEhL-zzVr3TkNpc6wCNl_wvi42gqEZ/exec',
+  tracking: 'https://script.google.com/macros/s/AKfycbz89cWPWlNihcLw9jpZpwgTBtcLb99u4m9wvjjEhL-zzVr3TkNpc6wCNl_wvi42gqEZ/exec'
+}
   };
 
   function readMeta(name) {
@@ -28,7 +28,7 @@
       return '';
     }
   }
-  const CURRENT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzNS4sNBcQ-E6c4AVzIL2QdboyQIW6rXs8-oiJ9AbkTIlnOVX1SXLYPBY_PpF7pYjF_FA/exec';
+  const CURRENT_ENDPOINT = 'https://script.google.com/macros/s/AKfycbz89cWPWlNihcLw9jpZpwgTBtcLb99u4m9wvjjEhL-zzVr3TkNpc6wCNl_wvi42gqEZ/exec';
   const LEGACY_ENDPOINTS = new Set([
     'https://script.google.com/macros/s/AKfycbzgKv6VM1K--AhdtFhAuGgm7rscoQCTf7vPFljAUr6njQRP_s6oyzB_UEIG5xWi0Se_4A/exec'
   ]);
