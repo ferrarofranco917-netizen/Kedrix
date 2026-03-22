@@ -14262,40 +14262,63 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const sessionId = sessionStorage.getItem('kedrix_session_id') || '';
       const licenseEmail = localStorage.getItem('license_email') || '';
 
-      const payload = {
-        source: 'kedrix_app',
-        reason: eventName,
-        syncedAt: new Date().toISOString(),
-        record: {
-          testerId,
-          sessionId,
-          licenseEmail,
-          build,
-          channel,
-          language,
-          firstSeenAt: localStorage.getItem('first_seen_at') || '',
-          lastSeenAt: new Date().toISOString(),
-          launchCount: Number(localStorage.getItem('launch_count') || 0),
-          feedbackCount: Number(localStorage.getItem('feedback_count') || 0),
-          device: {
-            standalone: window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true,
-            screen: `${window.screen.width}x${window.screen.height}`,
-            viewport: `${window.innerWidth}x${window.innerHeight}`,
-            platform: navigator.platform || '',
-            deviceFamily: /mobile/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
-            osFamily: navigator.userAgent || '',
-            browserFamily: navigator.userAgent || '',
-            ua: navigator.userAgent || ''
-          },
-          primaAzioneCompletata: localStorage.getItem('prima_azione') || 'no',
-          tempoPrimoValore: localStorage.getItem('tempo_primo_valore') || '',
-          tipoFeedback: extra.tipoFeedback || '',
-          qualitaFeedback: extra.qualitaFeedback || '',
-          categoriaFeedback: extra.categoriaFeedback || '',
-          messaggioFeedback: extra.messaggioFeedback || '',
-          attritoRilevato: extra.attritoRilevato || ''
-        }
+      const basePayload = {
+        origin: 'kedrix_app',
+        tester_id: testerId,
+        session_id: sessionId,
+        email: licenseEmail,
+        version: build,
+        channel,
+        lang: language
       };
+
+      const payload = (eventName === 'feedback_inviato')
+        ? {
+            action: 'feedback',
+            ...basePayload,
+            tester_id: testerId,
+            type: extra.tipoFeedback || 'generale',
+            quality: extra.qualitaFeedback || 'media',
+            category: extra.categoriaFeedback || 'valore',
+            message: extra.messaggioFeedback || ''
+          }
+        : {
+            action: 'track',
+            ...basePayload,
+            event: eventName,
+            source: 'kedrix_app',
+            reason: eventName,
+            syncedAt: new Date().toISOString(),
+            record: {
+              testerId,
+              sessionId,
+              licenseEmail,
+              build,
+              channel,
+              language,
+              firstSeenAt: localStorage.getItem('first_seen_at') || '',
+              lastSeenAt: new Date().toISOString(),
+              launchCount: Number(localStorage.getItem('launch_count') || 0),
+              feedbackCount: Number(localStorage.getItem('feedback_count') || 0),
+              device: {
+                standalone: window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true,
+                screen: `${window.screen.width}x${window.screen.height}`,
+                viewport: `${window.innerWidth}x${window.innerHeight}`,
+                platform: navigator.platform || '',
+                deviceFamily: /mobile/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
+                osFamily: navigator.userAgent || '',
+                browserFamily: navigator.userAgent || '',
+                ua: navigator.userAgent || ''
+              },
+              primaAzioneCompletata: localStorage.getItem('prima_azione') || 'no',
+              tempoPrimoValore: localStorage.getItem('tempo_primo_valore') || '',
+              tipoFeedback: extra.tipoFeedback || '',
+              qualitaFeedback: extra.qualitaFeedback || '',
+              categoriaFeedback: extra.categoriaFeedback || '',
+              messaggioFeedback: extra.messaggioFeedback || '',
+              attritoRilevato: extra.attritoRilevato || ''
+            }
+          };
 
       return await safeFetch(endpoint, payload);
     } catch (e) {

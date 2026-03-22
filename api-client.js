@@ -13,14 +13,33 @@
         ...extra
       };
     },
+    normalizePayload(payload = {}, meta = {}){
+      const raw = { ...payload, _meta: API.buildMeta(meta) };
+      const action = String(raw.action || '').trim().toLowerCase();
+      const normalized = { ...raw };
+
+      if (action === 'check_license' || action === 'activate_license' || action === 'register_beta_request' || action === 'beta_request') {
+        normalized.action = 'license';
+      }
+
+      if (normalized.email && !normalized.user_email) normalized.user_email = normalized.email;
+      if (normalized.testerId && !normalized.tester_id) normalized.tester_id = normalized.testerId;
+      if (normalized.licenseKey && !normalized.tester_id) normalized.tester_id = normalized.licenseKey;
+      if (normalized.sessionId && !normalized.session_id) normalized.session_id = normalized.sessionId;
+      if (normalized.source && !normalized.origin) normalized.origin = normalized.source;
+      if (normalized.client_sig && !normalized.clientSig) normalized.clientSig = normalized.client_sig;
+
+      return normalized;
+    },
     async request(url, payload = {}, options = {}){
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), options.timeout || DEFAULT_TIMEOUT);
       try {
+        const normalizedPayload = API.normalizePayload(payload, options.meta || {});
         const response = await fetch(url, {
           method: options.method || 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ ...payload, _meta: API.buildMeta(options.meta || {}) }),
+          body: JSON.stringify(normalizedPayload),
           mode: 'cors',
           credentials: 'omit',
           cache: 'no-store',
