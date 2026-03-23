@@ -1,31 +1,63 @@
+const RAW_SHEET_NAME = 'REGISTRO';
+const LEGACY_RAW_SHEET_NAME = 'Registry';
+const CRM_SHEET_NAME = 'TESTER_CRM';
+const KPI_SHEET_NAME = 'KPI';
+const EVENTS_SHEET_NAME = 'EVENTI_TRACKING';
+const FEEDBACK_SHEET_NAME = 'FEEDBACK';
+const LICENSES_SHEET_NAME = 'LICENSES';
+const BETA_REQUESTS_SHEET_NAME = 'BETA_REQUESTS';
+const SPREADSHEET_ID = '1-dCY39nipXvI8E9ujnwnGTyy_2Oo0cncwatB3gDJGOk';
+
+const TRACKING_ACTION_ALIASES = {
+  'track_event': 'tracking',
+  'tracking': 'tracking',
+  'track': 'tracking',
+  'event': 'tracking',
+  'register_beta_request': 'register_beta_request',
+  'beta_request': 'register_beta_request',
+  'request_beta_access': 'register_beta_request',
+  'check_license': 'check_license',
+  'license': 'check_license',
+  'activate_license': 'check_license',
+  'license_check': 'check_license'
+};
+
+const TRACKING_ANONYMOUS_ALLOWLIST = {
+  'feedback_inviato': true,
+  'beta_request_submitted': true,
+  'activation_started': true,
+  'first_action_done': true,
+  'time_to_first_action': true
+};
+
+const TRACKING_TECHNICAL_EVENTS = {
+  'errore': true,
+  'error': true,
+  'service_worker_error': true,
+  'network_error': true
+};
+
+const TRACKING_FORCE_SYNC_EVENTS = {
+  'feedback_inviato': true,
+  'prima_azione_completata': true,
+  'app_installata': true
+};
+
+const HEAVY_SYNC_MIN_INTERVAL_MS = 10 * 60 * 1000;
+
 function doGet(e) {
   try {
     const params = (e && e.parameter) || {};
-    const action = resolveAction_(params);
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const action = safeStr_(params.action || 'health').toLowerCase();
 
-    if (action === 'check_license') {
+    if (action === 'check_license' || action === 'license' || action === 'activate_license') {
+      const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
       return jsonResponse_(checkLicenseAction_({
-        email: params.email || params.user_email || '',
-        testerId: params.testerId || params.tester_id || '',
-        licenseKey: params.licenseKey || params.license_key || '',
-        source: params.source || params.origin || 'web'
+        email: params.email || '',
+        testerId: params.testerId || '',
+        licenseKey: params.licenseKey || '',
+        source: params.source || 'web'
       }, ss));
-    }
-
-    if (action === 'register_beta_request') {
-      return jsonResponse_(registerBetaRequestAction_({
-        email: params.email || params.user_email || '',
-        name: params.name || '',
-        reason: params.reason || '',
-        commitment: params.commitment || '',
-        source: params.source || params.origin || 'kedrix-site',
-        testerId: params.testerId || params.tester_id || ''
-      }, ss));
-    }
-
-    if (action === 'tracking' || action === 'feedback') {
-      return jsonResponse_(handleTrackingAction_(params, ss));
     }
 
     return jsonResponse_({
@@ -49,7 +81,7 @@ function doPost(e) {
       return jsonResponse_(registerBetaRequestAction_(payload, ss));
     }
 
-    if (action === 'check_license') {
+    if (action === 'check_license' || action === 'license' || action === 'activate_license') {
       return jsonResponse_(checkLicenseAction_(payload, ss));
     }
 
@@ -950,21 +982,13 @@ function eventValueFromRecord_(record, reason) {
 }
 
 function parsePayload_(e) {
-  const params = (e && e.parameter) || {};
   const raw = (e && e.postData && e.postData.contents) || '{}';
-  let parsed = {};
-
   try {
-    parsed = raw ? JSON.parse(raw) : {};
-    if (!parsed || typeof parsed !== 'object') parsed = {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
   } catch (_err) {
-    parsed = {};
+    throw new Error('Payload JSON non valido');
   }
-
-  const merged = {};
-  Object.keys(params).forEach(function(key) { merged[key] = params[key]; });
-  Object.keys(parsed).forEach(function(key) { merged[key] = parsed[key]; });
-  return merged;
 }
 
 function normalizeRecord_(payload) {
@@ -977,20 +1001,20 @@ function normalizeRecord_(payload) {
     : {};
 
   return {
-    testerId: firstNonEmpty_(sourceRecord.testerId, payload.testerId, payload.tester_id, payload.user),
-    sessionId: firstNonEmpty_(sourceRecord.sessionId, payload.sessionId, payload.session_id, payload.session),
-    licenseEmail: firstNonEmpty_(sourceRecord.licenseEmail, payload.licenseEmail, payload.email, payload.user_email),
-    build: firstNonEmpty_(sourceRecord.build, payload.build, payload.version),
+    testerId: firstNonEmpty_(sourceRecord.testerId, payload.testerId, payload.user),
+    sessionId: firstNonEmpty_(sourceRecord.sessionId, payload.sessionId, payload.session),
+    licenseEmail: firstNonEmpty_(sourceRecord.licenseEmail, payload.licenseEmail, payload.email),
+    build: firstNonEmpty_(sourceRecord.build, payload.build),
     channel: firstNonEmpty_(sourceRecord.channel, payload.channel),
-    language: firstNonEmpty_(sourceRecord.language, payload.language, payload.lang),
+    language: firstNonEmpty_(sourceRecord.language, payload.language),
     firstSeenAt: firstNonEmpty_(sourceRecord.firstSeenAt, payload.firstSeenAt),
     lastSeenAt: firstNonEmpty_(sourceRecord.lastSeenAt, payload.lastSeenAt, normalizeEventTimestamp_(payload.timestamp)),
     launchCount: firstNonEmpty_(sourceRecord.launchCount, payload.launchCount),
     feedbackCount: firstNonEmpty_(sourceRecord.feedbackCount, payload.feedbackCount),
-    tipoFeedback: firstNonEmpty_(sourceRecord.tipoFeedback, payload.tipoFeedback, payload.type),
-    messaggioFeedback: firstNonEmpty_(sourceRecord.messaggioFeedback, payload.messaggioFeedback, payload.message),
-    qualitaFeedback: firstNonEmpty_(sourceRecord.qualitaFeedback, payload.qualitaFeedback, payload.quality),
-    categoriaFeedback: firstNonEmpty_(sourceRecord.categoriaFeedback, payload.categoriaFeedback, payload.category),
+    tipoFeedback: firstNonEmpty_(sourceRecord.tipoFeedback, payload.tipoFeedback),
+    messaggioFeedback: firstNonEmpty_(sourceRecord.messaggioFeedback, payload.messaggioFeedback),
+    qualitaFeedback: firstNonEmpty_(sourceRecord.qualitaFeedback, payload.qualitaFeedback),
+    categoriaFeedback: firstNonEmpty_(sourceRecord.categoriaFeedback, payload.categoriaFeedback),
     reason: firstNonEmpty_(sourceRecord.reason, payload.reason, payload.event),
     source: firstNonEmpty_(sourceRecord.source, payload.source),
     syncedAt: firstNonEmpty_(sourceRecord.syncedAt, payload.syncedAt, normalizeEventTimestamp_(payload.timestamp)),
@@ -1005,7 +1029,7 @@ function normalizeRecord_(payload) {
       deviceFamily: firstNonEmpty_(sourceDevice.deviceFamily, payload.deviceFamily),
       osFamily: firstNonEmpty_(sourceDevice.osFamily, payload.osFamily),
       browserFamily: firstNonEmpty_(sourceDevice.browserFamily, payload.browserFamily),
-      ua: firstNonEmpty_(sourceDevice.ua, payload.ua, payload.userAgent, payload.user_agent)
+      ua: firstNonEmpty_(sourceDevice.ua, payload.ua, payload.userAgent)
     }
   };
 }

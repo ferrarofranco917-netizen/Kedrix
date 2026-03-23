@@ -15,6 +15,7 @@
     },
     normalizePayload(payload = {}, meta = {}){
       const raw = { ...payload, _meta: API.buildMeta(meta) };
+      const action = String(raw.action || '').trim().toLowerCase();
       const normalized = { ...raw };
 
       if (normalized.email && !normalized.user_email) normalized.user_email = normalized.email;
@@ -31,51 +32,19 @@
       const timeout = setTimeout(() => controller.abort(), options.timeout || DEFAULT_TIMEOUT);
       try {
         const normalizedPayload = API.normalizePayload(payload, options.meta || {});
-        const action = String(normalizedPayload.action || '').trim().toLowerCase();
-        const queryUrl = new URL(url, window.location.href);
-
-        Object.entries(normalizedPayload).forEach(([key, value]) => {
-          if (value === undefined || value === null || value === '') return;
-          if (typeof value === 'object') {
-            queryUrl.searchParams.set(key, JSON.stringify(value));
-          } else {
-            queryUrl.searchParams.set(key, String(value));
-          }
-        });
-
-        const readActions = new Set(['check_license', 'register_beta_request', 'beta_request', 'activate_license']);
-
-        if (readActions.has(action)) {
-          const response = await fetch(queryUrl.toString(), {
-            method: 'GET',
-            mode: 'cors',
-            credentials: 'omit',
-            cache: 'no-store',
-            signal: controller.signal
-          });
-          const raw = await response.text().catch(() => '');
-          let data = {};
-          try { data = raw ? JSON.parse(raw) : {}; } catch(_e) { data = { ok:false, raw }; }
-          return { ok: response.ok, status: response.status, data, raw };
-        }
-
-        const body = JSON.stringify(normalizedPayload);
-
-        if (navigator.sendBeacon) {
-          const beaconOk = navigator.sendBeacon(queryUrl.toString(), new Blob([body], { type: 'text/plain;charset=utf-8' }));
-          return { ok: beaconOk, status: beaconOk ? 202 : 0, data: { queued: beaconOk }, raw: '' };
-        }
-
-        await fetch(queryUrl.toString(), {
-          method: 'POST',
-          mode: 'no-cors',
+        const response = await fetch(url, {
+          method: options.method || 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(normalizedPayload),
+          mode: 'cors',
           credentials: 'omit',
           cache: 'no-store',
-          body,
           signal: controller.signal
         });
-
-        return { ok: true, status: 0, data: { queued: true }, raw: '' };
+        const raw = await response.text().catch(() => '');
+        let data = {};
+        try { data = raw ? JSON.parse(raw) : {}; } catch(_e) { data = { ok:false, raw }; }
+        return { ok: response.ok, status: response.status, data, raw };
       } finally {
         clearTimeout(timeout);
       }

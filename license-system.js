@@ -123,9 +123,9 @@ class KedrixLicense {
                 ? await window.KedrixAPI.request(this.endpoint, payload, { meta: { route: 'check_license' } })
                 : null;
 
-            const rawText = apiResult ? apiResult.raw : '';
-            let data = apiResult ? (apiResult.data || {}) : {};
-            try { data = rawText ? JSON.parse(rawText) : data; } catch (_err) { data = data || {}; }
+            const data = apiResult && apiResult.data && typeof apiResult.data === 'object'
+                ? apiResult.data
+                : {};
 
             const status = String(data.license_status || 'missing').trim() || 'missing';
             const accessAllowed = !!data.access_allowed;
