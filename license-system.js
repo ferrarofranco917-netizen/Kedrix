@@ -70,55 +70,11 @@ class KedrixLicense {
         return '';
     }
 
-
-    consumeActivationContext() {
-        try {
-            const params = new URLSearchParams(window.location.search || '');
-            const hash = String(window.location.hash || '').replace(/^#/, '');
-            const hashParams = new URLSearchParams(hash.includes('=') ? hash : '');
-            const read = (...keys) => {
-                for (const key of keys) {
-                    const fromQuery = params.get(key);
-                    if (fromQuery && String(fromQuery).trim()) return String(fromQuery).trim();
-                    const fromHash = hashParams.get(key);
-                    if (fromHash && String(fromHash).trim()) return String(fromHash).trim();
-                }
-                return '';
-            };
-
-            const email = String(read('email', 'user_email', 'mail')).trim().toLowerCase();
-            const testerId = String(read('tester_id', 'testerId', 'license', 'license_key', 'licenseKey', 'activation_code', 'code', 'kdx')).trim();
-            const autoFlag = String(read('auto_license', 'autologin', 'activate', 'auto')).trim().toLowerCase();
-
-            let changed = false;
-            if (email && email !== this.state.email) {
-                this.state.email = email;
-                changed = true;
-            }
-            if (testerId && testerId !== this.state.testerId) {
-                this.state.testerId = testerId;
-                changed = true;
-            }
-
-            if (changed) {
-                localStorage.setItem(this.storage.email, this.state.email || '');
-                localStorage.setItem(this.storage.testerId, this.state.testerId || '');
-                if (this.state.email) localStorage.setItem('bw-license-email', this.state.email);
-            }
-
-            if (changed || autoFlag === '1' || autoFlag === 'true' || autoFlag === 'yes') {
-                const cleanUrl = `${window.location.pathname}${window.location.hash && !hash.includes('=') ? window.location.hash : ''}`;
-                window.history.replaceState({}, document.title, cleanUrl);
-            }
-        } catch (_err) {}
-    }
-
     async bootstrap() {
         this.injectGateStyles();
         this.renderGate();
-        this.consumeActivationContext();
 
-        if (!this.state.email && !this.state.testerId) {
+        if (!this.state.email) {
             this.showGate('missing');
             return this.state;
         }

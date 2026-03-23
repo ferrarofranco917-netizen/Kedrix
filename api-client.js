@@ -18,13 +18,6 @@
       const action = String(raw.action || '').trim().toLowerCase();
       const normalized = { ...raw };
 
-      if (action === 'beta_request') {
-        normalized.action = 'register_beta_request';
-      }
-
-      if (action === 'activate_license') {
-        normalized.action = 'check_license';
-      }
 
       if (normalized.email && !normalized.user_email) normalized.user_email = normalized.email;
       if (normalized.testerId && !normalized.tester_id) normalized.tester_id = normalized.testerId;
@@ -40,9 +33,16 @@
       const timeout = setTimeout(() => controller.abort(), options.timeout || DEFAULT_TIMEOUT);
       try {
         const normalizedPayload = API.normalizePayload(payload, options.meta || {});
-        const response = await fetch(url, {
+        const action = String(normalizedPayload.action || '').trim();
+        const requestUrl = (() => {
+          if (!url) return '';
+          if (!action) return url;
+          const sep = url.includes('?') ? '&' : '?';
+          return `${url}${sep}action=${encodeURIComponent(action)}`;
+        })();
+        const response = await fetch(requestUrl || url, {
           method: options.method || 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          headers: { 'Content-Type': 'application/json;charset=utf-8' },
           body: JSON.stringify(normalizedPayload),
           mode: 'cors',
           credentials: 'omit',

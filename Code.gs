@@ -13,25 +13,22 @@ const TRACKING_ACTION_ALIASES = {
   'tracking': 'tracking',
   'track': 'tracking',
   'event': 'tracking',
+  'feedback': 'feedback',
   'register_beta_request': 'register_beta_request',
   'beta_request': 'register_beta_request',
   'request_beta_access': 'register_beta_request',
   'check_license': 'check_license',
   'license_check': 'check_license',
-  'activate_license': 'check_license',
   'license': 'check_license',
-  'feedback': 'feedback'
+  'activate_license': 'check_license'
 };
 
 const TRACKING_ANONYMOUS_ALLOWLIST = {
   'feedback_inviato': true,
   'beta_request_submitted': true,
   'activation_started': true,
-  'activation_success': true,
   'first_action_done': true,
-  'time_to_first_action': true,
-  'app_aperta': true,
-  'app_installata': true
+  'time_to_first_action': true
 };
 
 const TRACKING_TECHNICAL_EVENTS = {
@@ -90,7 +87,7 @@ function doPost(e) {
     }
 
     if (action === 'feedback') {
-      return jsonResponse_(handleTrackingAction_(payload, ss));
+      return jsonResponse_(handleFeedbackAction_(payload, ss));
     }
 
     return jsonResponse_(handleTrackingAction_(payload, ss));
@@ -102,6 +99,20 @@ function doPost(e) {
   }
 }
 
+
+function handleFeedbackAction_(payload, ss) {
+  const normalized = { ...payload, event: 'feedback_inviato', reason: 'feedback_inviato', action: 'track' };
+  normalized.record = normalized.record && typeof normalized.record === 'object' ? normalized.record : {};
+  normalized.record.tipoFeedback = firstNonEmpty_(normalized.record.tipoFeedback, payload.type, payload.tipoFeedback, 'feedback_app');
+  normalized.record.messaggioFeedback = firstNonEmpty_(normalized.record.messaggioFeedback, payload.message, payload.messaggioFeedback, '');
+  normalized.record.qualitaFeedback = firstNonEmpty_(normalized.record.qualitaFeedback, payload.quality, payload.qualitaFeedback, 'media');
+  normalized.record.categoriaFeedback = firstNonEmpty_(normalized.record.categoriaFeedback, payload.category, payload.categoriaFeedback, 'valore');
+  normalized.record.feedbackCount = firstNonEmpty_(normalized.record.feedbackCount, payload.feedbackCount, 1);
+  normalized.testerId = firstNonEmpty_(payload.tester_id, payload.testerId, payload.licenseKey);
+  normalized.sessionId = firstNonEmpty_(payload.session_id, payload.sessionId);
+  normalized.email = firstNonEmpty_(payload.email, payload.user_email, payload.licenseEmail);
+  return handleTrackingAction_(normalized, ss);
+}
 function handleTrackingAction_(payload, ss) {
   const rawSheet = getOrCreateSheet_(ss, RAW_SHEET_NAME, LEGACY_RAW_SHEET_NAME);
   ensureRegistroHeader_(rawSheet);
@@ -327,7 +338,6 @@ function registerBetaRequestAction_(payload, ss) {
     status: 'pending',
     tester_id: testerId,
     email: email,
-    activation_url: 'https://kedrix-base-beta-978311.gitlab.io/?email=' + encodeURIComponent(email) + '&tester_id=' + encodeURIComponent(testerId) + '&auto_license=1',
     message: 'Richiesta beta registrata correttamente'
   };
 }
@@ -336,11 +346,11 @@ function checkLicenseAction_(payload, ss) {
   const licensesSheet = getOrCreateSheet_(ss, LICENSES_SHEET_NAME);
   ensureLicensesHeader_(licensesSheet);
 
-  const email = normalizeEmail_(payload.email || payload.licenseEmail || payload.user_email || '');
-  const testerId = safeStr_(payload.testerId || payload.tester_id || payload.licenseKey || payload.license_key || '');
-  const now = new Date();
+  const email = normalizeEmail_(payload.email || payload.licenseEmail || '');
+  const testerId = safeStr_(payload.testerId || payload.licenseKey || '');
 
   const found = findLicenseRow_(licensesSheet, { email: email, testerId: testerId });
+  const now = new Date();
 
   if (!found.rowIndex) {
     return {
@@ -348,53 +358,18 @@ function checkLicenseAction_(payload, ss) {
       action: 'check_license',
       license_status: 'missing',
       reason: 'license_not_found',
-      access_allowed: false,
-      email: email,
-      tester_id: testerId,
-      message: licenseMessage_('missing')
+      access_allowed: false
     };
   }
 
   const rowIndex = found.rowIndex;
-  const license = found.license || {};
-  let status = resolveLicenseStatus_(license, now);
-  const normalizedEmail = normalizeEmail_(license.email || '');
-  const normalizedTesterId = safeStr_(license.tester_id || '');
-  const exactEmailMatch = !!email && normalizedEmail === email;
-  const exactTesterMatch = !!testerId && normalizedTesterId === testerId;
-
-  if (status === 'pending' && exactTesterMatch && (!email || exactEmailMatch)) {
-    const activationDate = license.data_attivazione || now;
-    const expiryDate = license.data_scadenza || new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-    licensesSheet.getRange(rowIndex, 3).setValue('active');
-    licensesSheet.getRange(rowIndex, 5).setValue(activationDate);
-    licensesSheet.getRange(rowIndex, 6).setValue(expiryDate);
-    licensesSheet.getRange(rowIndex, 9).setValue(now);
-    licensesSheet.getRange(rowIndex, 10).setValue(now);
-    licensesSheet.getRange(rowIndex, 15).setValue(now);
-
-    if (email && !normalizedEmail) {
-      licensesSheet.getRange(rowIndex, 2).setValue(email);
-    }
-
-    status = 'active';
-    license.stato = 'active';
-    license.data_attivazione = activationDate;
-    license.data_scadenza = expiryDate;
-    license.ultimo_accesso = now;
-    license.ultimo_check = now;
-    license.updated_at = now;
-    if (email && !normalizedEmail) license.email = email;
-  } else {
-    licensesSheet.getRange(rowIndex, 10).setValue(now);
-    licensesSheet.getRange(rowIndex, 15).setValue(now);
-    if (status === 'active') {
-      licensesSheet.getRange(rowIndex, 9).setValue(now);
-    }
-  }
-
+  const license = found.license;
+  const status = resolveLicenseStatus_(license, now);
   const allowed = status === 'active';
+
+  licensesSheet.getRange(rowIndex, 10).setValue(now);
+  licensesSheet.getRange(rowIndex, 15).setValue(now);
+  if (allowed) licensesSheet.getRange(rowIndex, 9).setValue(now);
 
   return {
     ok: allowed,
@@ -408,8 +383,7 @@ function checkLicenseAction_(payload, ss) {
     expires_at: normalizeDateOutput_(license.data_scadenza),
     activated_at: normalizeDateOutput_(license.data_attivazione),
     role: mapRoleFromLicenseType_(license.tipo_licenza),
-    message: licenseMessage_(status),
-    auto_activated: status === 'active' && exactTesterMatch
+    message: licenseMessage_(status)
   };
 }
 
@@ -638,7 +612,6 @@ function classifyTrackingGroup_(reason) {
 function shouldIgnoreTrackingEvent_(reason, testerId, licenseEmail, sessionId) {
   const normalized = normalizeReason_(reason);
   if (testerId || licenseEmail) return false;
-  if (TRACKING_ANONYMOUS_ALLOWLIST[normalized] && sessionId) return false;
   if (!sessionId && !TRACKING_ANONYMOUS_ALLOWLIST[normalized]) return true;
   if (TRACKING_ANONYMOUS_ALLOWLIST[normalized]) return false;
   return true;
@@ -1033,6 +1006,8 @@ function parsePayload_(e) {
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === 'object' ? parsed : {};
   } catch (_err) {
+    const params = (e && e.parameter) || {};
+    if (params && Object.keys(params).length) return params;
     throw new Error('Payload JSON non valido');
   }
 }
