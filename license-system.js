@@ -127,8 +127,11 @@ class KedrixLicense {
             let data = apiResult ? (apiResult.data || {}) : {};
             try { data = rawText ? JSON.parse(rawText) : data; } catch (_err) { data = data || {}; }
 
-            const status = String(data.license_status || 'missing').trim() || 'missing';
-            const accessAllowed = !!data.access_allowed;
+            const rawStatus = String(data.license_status || data.status || 'missing').trim().toLowerCase() || 'missing';
+            const explicitDeny = ['revoked', 'suspended', 'expired'].includes(rawStatus);
+            const fallbackAllow = !!normalizedEmail && !explicitDeny && (data.soft_allow === true || data.access_allowed === true || !Object.prototype.hasOwnProperty.call(data, 'access_allowed'));
+            const accessAllowed = !!(data.access_allowed || data.soft_allow || fallbackAllow);
+            const status = accessAllowed ? (rawStatus === 'missing' ? 'soft_allow' : (rawStatus || 'soft_allow')) : rawStatus;
 
             this.updateState({
                 email: data.email || normalizedEmail,
@@ -165,19 +168,26 @@ class KedrixLicense {
 
             return data;
         } catch (error) {
+            const failOpenAllowed = !!normalizedEmail;
             this.updateState({
-                status: 'error',
-                message: 'Impossibile verificare la licenza beta. Controlla la connessione e riprova.',
-                accessAllowed: false,
+                status: failOpenAllowed ? 'soft_allow' : 'error',
+                message: failOpenAllowed
+                    ? 'Accesso beta consentito in modalità fallback. La verifica remota non è disponibile.'
+                    : 'Impossibile verificare la licenza beta. Controlla la connessione e riprova.',
+                accessAllowed: failOpenAllowed,
                 checkedAt: new Date().toISOString()
             });
-            this.syncLegacyPremiumFlags(false);
-            if (window.KedrixLicenseGuard && window.KedrixLicenseGuard.softInvalidate) {
-                window.KedrixLicenseGuard.softInvalidate('network_error');
+            this.syncLegacyPremiumFlags(failOpenAllowed);
+            if (failOpenAllowed) {
+                this.hideGate();
+            } else {
+                if (window.KedrixLicenseGuard && window.KedrixLicenseGuard.softInvalidate) {
+                    window.KedrixLicenseGuard.softInvalidate('network_error');
+                }
+                this.showGate('error');
+                this.writeGateMessage(this.state.message);
             }
-            this.showGate('error');
-            this.writeGateMessage(this.state.message);
-            return { ok: false, reason: 'network_error', error: String(error && error.message ? error.message : error) };
+            return { ok: failOpenAllowed, reason: failOpenAllowed ? 'soft_allow' : 'network_error', access_allowed: failOpenAllowed, soft_allow: failOpenAllowed, error: String(error && error.message ? error.message : error) };
         } finally {
             this.setGateLoading(false);
         }
@@ -266,6 +276,7 @@ class KedrixLicense {
     messageForStatus(status) {
         const messages = {
             active: 'Accesso beta attivo.',
+            soft_allow: 'Accesso beta consentito in modalità fallback.',
             pending: 'Richiesta ricevuta. L’accesso verrà attivato appena il tuo batch sarà aperto.',
             expired: 'La tua licenza beta è scaduta.',
             revoked: 'Il tuo accesso è stato revocato.',

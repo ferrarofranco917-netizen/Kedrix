@@ -17,7 +17,9 @@ const TRACKING_ACTION_ALIASES = {
   'beta_request': 'register_beta_request',
   'request_beta_access': 'register_beta_request',
   'check_license': 'check_license',
-  'license_check': 'check_license'
+  'license_check': 'check_license',
+  'license': 'check_license',
+  'activate_license': 'check_license'
 };
 
 const TRACKING_ANONYMOUS_ALLOWLIST = {
@@ -46,7 +48,7 @@ const HEAVY_SYNC_MIN_INTERVAL_MS = 10 * 60 * 1000;
 function doGet(e) {
   try {
     const params = (e && e.parameter) || {};
-    const action = safeStr_(params.action || 'health').toLowerCase();
+    const action = TRACKING_ACTION_ALIASES[safeStr_(params.action || 'health').toLowerCase()] || safeStr_(params.action || 'health').toLowerCase();
 
     if (action === 'check_license') {
       const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -332,19 +334,46 @@ function checkLicenseAction_(payload, ss) {
   const now = new Date();
 
   if (!found.rowIndex) {
+    const softTesterId = testerId || generateTesterId_();
+    licensesSheet.appendRow([
+      softTesterId,
+      email,
+      'soft_allow',
+      'beta',
+      now,
+      '',
+      '',
+      'no',
+      now,
+      now,
+      'Auto-created by beta fallback',
+      safeStr_(payload.source || 'kedrix-app'),
+      '',
+      now,
+      now
+    ]);
+
     return {
-      ok: false,
+      ok: true,
       action: 'check_license',
-      license_status: 'missing',
-      reason: 'license_not_found',
-      access_allowed: false
+      access_allowed: true,
+      soft_allow: true,
+      license_status: 'soft_allow',
+      tester_id: softTesterId,
+      email: email,
+      license_type: 'beta',
+      batch: '',
+      expires_at: '',
+      activated_at: normalizeDateOutput_(now),
+      role: 'tester',
+      message: 'Accesso beta consentito in modalità fallback.'
     };
   }
 
   const rowIndex = found.rowIndex;
   const license = found.license;
   const status = resolveLicenseStatus_(license, now);
-  const allowed = status === 'active';
+  const allowed = status === 'active' || status === 'soft_allow';
 
   licensesSheet.getRange(rowIndex, 10).setValue(now);
   licensesSheet.getRange(rowIndex, 15).setValue(now);
@@ -1176,8 +1205,9 @@ function resolveLicenseStatus_(license, now) {
   }
 
   if (explicitStatus === 'active') return 'active';
+  if (explicitStatus === 'soft_allow') return 'soft_allow';
   if (explicitStatus === 'expired') return 'expired';
-  return 'missing';
+  return 'soft_allow';
 }
 
 function mapRoleFromLicenseType_(licenseType) {
