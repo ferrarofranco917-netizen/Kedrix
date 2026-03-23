@@ -14203,6 +14203,29 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
   const getAppRef = () => window.app || window.KedrixApp || null;
 
+  const readActivationContext = () => {
+    try {
+      const params = new URLSearchParams(window.location.search || '');
+      const hash = String(window.location.hash || '').replace(/^#/, '');
+      const hashParams = new URLSearchParams(hash.includes('=') ? hash : '');
+      const read = (...keys) => {
+        for (const key of keys) {
+          const fromQuery = params.get(key);
+          if (fromQuery && String(fromQuery).trim()) return String(fromQuery).trim();
+          const fromHash = hashParams.get(key);
+          if (fromHash && String(fromHash).trim()) return String(fromHash).trim();
+        }
+        return '';
+      };
+      return {
+        email: String(read('email', 'user_email', 'mail')).trim().toLowerCase(),
+        testerId: String(read('tester_id', 'testerId', 'license', 'license_key', 'licenseKey', 'activation_code', 'code', 'kdx')).trim()
+      };
+    } catch (_err) {
+      return { email: '', testerId: '' };
+    }
+  };
+
   const ensureFirstSeen = () => {
     if (!localStorage.getItem('first_seen_at')) {
       localStorage.setItem('first_seen_at', new Date().toISOString());
@@ -14258,9 +14281,13 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const language = (app && app.data && app.data.language) || document.documentElement.lang || 'it';
       const build = (typeof KEDRIX_BUILD !== 'undefined' && KEDRIX_BUILD) || (app && app.build) || 'unknown';
       const channel = (typeof KEDRIX_RELEASE_CHANNEL !== 'undefined' && KEDRIX_RELEASE_CHANNEL) || 'beta';
-      const testerId = localStorage.getItem('tester_id') || '';
+      const activationContext = readActivationContext();
+      const testerId = localStorage.getItem('tester_id') || activationContext.testerId || '';
       const sessionId = sessionStorage.getItem('kedrix_session_id') || '';
-      const licenseEmail = localStorage.getItem('license_email') || '';
+      const licenseEmail = localStorage.getItem('license_email') || activationContext.email || '';
+
+      if (activationContext.testerId && !localStorage.getItem('tester_id')) localStorage.setItem('tester_id', activationContext.testerId);
+      if (activationContext.email && !localStorage.getItem('license_email')) localStorage.setItem('license_email', activationContext.email);
 
       const basePayload = {
         origin: 'kedrix_app',
@@ -14277,10 +14304,17 @@ document.addEventListener("DOMContentLoaded", ()=>{
             action: 'feedback',
             ...basePayload,
             tester_id: testerId,
+            event: 'feedback_inviato',
+            reason: 'feedback_inviato',
             type: extra.tipoFeedback || 'generale',
             quality: extra.qualitaFeedback || 'media',
             category: extra.categoriaFeedback || 'valore',
-            message: extra.messaggioFeedback || ''
+            message: extra.messaggioFeedback || '',
+            tipoFeedback: extra.tipoFeedback || 'generale',
+            qualitaFeedback: extra.qualitaFeedback || 'media',
+            categoriaFeedback: extra.categoriaFeedback || 'valore',
+            messaggioFeedback: extra.messaggioFeedback || '',
+            feedbackCount: Number(localStorage.getItem('feedback_count') || 0)
           }
         : {
             action: 'track',

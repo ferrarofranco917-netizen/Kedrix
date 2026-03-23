@@ -19,15 +19,19 @@ const TRACKING_ACTION_ALIASES = {
   'check_license': 'check_license',
   'license_check': 'check_license',
   'activate_license': 'check_license',
-  'license': 'check_license'
+  'license': 'check_license',
+  'feedback': 'feedback'
 };
 
 const TRACKING_ANONYMOUS_ALLOWLIST = {
   'feedback_inviato': true,
   'beta_request_submitted': true,
   'activation_started': true,
+  'activation_success': true,
   'first_action_done': true,
-  'time_to_first_action': true
+  'time_to_first_action': true,
+  'app_aperta': true,
+  'app_installata': true
 };
 
 const TRACKING_TECHNICAL_EVENTS = {
@@ -83,6 +87,10 @@ function doPost(e) {
 
     if (action === 'check_license') {
       return jsonResponse_(checkLicenseAction_(payload, ss));
+    }
+
+    if (action === 'feedback') {
+      return jsonResponse_(handleTrackingAction_(payload, ss));
     }
 
     return jsonResponse_(handleTrackingAction_(payload, ss));
@@ -630,6 +638,7 @@ function classifyTrackingGroup_(reason) {
 function shouldIgnoreTrackingEvent_(reason, testerId, licenseEmail, sessionId) {
   const normalized = normalizeReason_(reason);
   if (testerId || licenseEmail) return false;
+  if (TRACKING_ANONYMOUS_ALLOWLIST[normalized] && sessionId) return false;
   if (!sessionId && !TRACKING_ANONYMOUS_ALLOWLIST[normalized]) return true;
   if (TRACKING_ANONYMOUS_ALLOWLIST[normalized]) return false;
   return true;
