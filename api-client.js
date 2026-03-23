@@ -13,31 +13,14 @@
         ...extra
       };
     },
-    normalizePayload(payload = {}, meta = {}){
-      const raw = { ...payload, _meta: API.buildMeta(meta) };
-      const normalized = { ...raw };
-
-      // NOTE: do NOT remap action here — the GAS backend routes on the original action name.
-      // Remapping 'check_license' → 'license' breaks the license check (GAS has no 'license' route).
-
-      if (normalized.email && !normalized.user_email) normalized.user_email = normalized.email;
-      if (normalized.testerId && !normalized.tester_id) normalized.tester_id = normalized.testerId;
-      if (normalized.licenseKey && !normalized.tester_id) normalized.tester_id = normalized.licenseKey;
-      if (normalized.sessionId && !normalized.session_id) normalized.session_id = normalized.sessionId;
-      if (normalized.source && !normalized.origin) normalized.origin = normalized.source;
-      if (normalized.client_sig && !normalized.clientSig) normalized.clientSig = normalized.client_sig;
-
-      return normalized;
-    },
     async request(url, payload = {}, options = {}){
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), options.timeout || DEFAULT_TIMEOUT);
       try {
-        const normalizedPayload = API.normalizePayload(payload, options.meta || {});
         const response = await fetch(url, {
           method: options.method || 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(normalizedPayload),
+          body: JSON.stringify({ ...payload, _meta: API.buildMeta(options.meta || {}) }),
           mode: 'cors',
           credentials: 'omit',
           cache: 'no-store',

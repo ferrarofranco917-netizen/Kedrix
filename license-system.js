@@ -98,35 +98,34 @@ class KedrixLicense {
         if (!normalizedEmail && !normalizedTesterId) {
             this.updateState({
                 status: 'missing',
-                message: 'Inserisci l\u2019email con cui hai richiesto l\u2019accesso beta.',
+                message: 'Inserisci l’email con cui hai richiesto l’accesso beta.',
                 accessAllowed: false
             });
             this.showGate('missing');
             return { ok: false, reason: 'missing_credentials' };
         }
 
-        this.setGateLoading(true, 'Verifica accesso beta in corso\u2026');
+        this.setGateLoading(true, 'Verifica accesso beta in corso…');
 
         try {
             const payload = {
-                action: 'check_license',
-                email: normalizedEmail,
-                testerId: normalizedTesterId,
-                licenseKey: normalizedTesterId,
-                source: 'kedrix-app',
-                client_sig: (window.KedrixLicenseGuard && window.KedrixLicenseGuard.sign)
-                    ? window.KedrixLicenseGuard.sign({ email: normalizedEmail, testerId: normalizedTesterId })
-                    : ''
-            };
+                    action: 'check_license',
+                    email: normalizedEmail,
+                    testerId: normalizedTesterId,
+                    licenseKey: normalizedTesterId,
+                    source: 'kedrix-app',
+                    client_sig: (window.KedrixLicenseGuard && window.KedrixLicenseGuard.sign)
+                        ? window.KedrixLicenseGuard.sign({ email: normalizedEmail, testerId: normalizedTesterId })
+                        : ''
+                };
 
             const apiResult = (window.KedrixAPI && window.KedrixAPI.request)
                 ? await window.KedrixAPI.request(this.endpoint, payload, { meta: { route: 'check_license' } })
                 : null;
 
-            // FIX: apiResult.data is already parsed by api-client.js — no need to re-parse raw.
-            const data = (apiResult && apiResult.data && typeof apiResult.data === 'object')
-                ? apiResult.data
-                : {};
+            const rawText = apiResult ? apiResult.raw : '';
+            let data = apiResult ? (apiResult.data || {}) : {};
+            try { data = rawText ? JSON.parse(rawText) : data; } catch (_err) { data = data || {}; }
 
             const status = String(data.license_status || 'missing').trim() || 'missing';
             const accessAllowed = !!data.access_allowed;
@@ -221,7 +220,7 @@ class KedrixLicense {
     }
 
     getUpgradeMessage(_feature) {
-        return 'Accesso beta richiesto. Inserisci un\u2019email autorizzata o attendi l\u2019attivazione della licenza.';
+        return 'Accesso beta richiesto. Inserisci un’email autorizzata o attendi l’attivazione della licenza.';
     }
 
     getRemainingDays() {
@@ -267,11 +266,10 @@ class KedrixLicense {
     messageForStatus(status) {
         const messages = {
             active: 'Accesso beta attivo.',
-            soft_allow: 'Accesso beta attivo.',
-            pending: 'Richiesta ricevuta. L\u2019accesso verr\u00e0 attivato appena il tuo batch sar\u00e0 aperto.',
-            expired: 'La tua licenza beta \u00e8 scaduta.',
-            revoked: 'Il tuo accesso \u00e8 stato revocato.',
-            suspended: 'Il tuo accesso \u00e8 temporaneamente sospeso.',
+            pending: 'Richiesta ricevuta. L’accesso verrà attivato appena il tuo batch sarà aperto.',
+            expired: 'La tua licenza beta è scaduta.',
+            revoked: 'Il tuo accesso è stato revocato.',
+            suspended: 'Il tuo accesso è temporaneamente sospeso.',
             missing: 'Email non ancora autorizzata alla beta.',
             error: 'Impossibile verificare la licenza beta.'
         };
@@ -306,9 +304,9 @@ class KedrixLicense {
         gate.className = 'kedrix-beta-gate is-visible';
         gate.innerHTML = `
             <div class="kedrix-beta-gate__card" role="dialog" aria-modal="true" aria-labelledby="kedrixBetaGateTitle">
-                <div class="kedrix-beta-gate__eyebrow">Kedrix \u2014 Controlled Beta</div>
+                <div class="kedrix-beta-gate__eyebrow">Kedrix — Controlled Beta</div>
                 <h1 id="kedrixBetaGateTitle" class="kedrix-beta-gate__title">Accesso beta controllato</h1>
-                <p id="kedrixBetaGateMessage" class="kedrix-beta-gate__message">Inserisci l\u2019email con cui hai richiesto l\u2019accesso beta.</p>
+                <p id="kedrixBetaGateMessage" class="kedrix-beta-gate__message">Inserisci l’email con cui hai richiesto l’accesso beta.</p>
                 <form id="kedrixBetaGateForm" class="kedrix-beta-gate__form">
                     <label>
                         <span>Email autorizzata</span>
@@ -391,7 +389,7 @@ class KedrixLicense {
         const submit = document.getElementById('kedrixBetaSubmit');
         if (submit) {
             submit.disabled = isLoading;
-            submit.textContent = isLoading ? 'Verifica\u2026' : 'Verifica accesso';
+            submit.textContent = isLoading ? 'Verifica…' : 'Verifica accesso';
         }
         if (message) this.writeGateMessage(message, 'neutral');
     }
@@ -413,7 +411,7 @@ class KedrixLicense {
         gate.classList.add('is-visible');
         document.body.classList.add('kedrix-beta-locked');
         const message = this.state.message || this.messageForStatus(status);
-        const tone = status === 'error' ? 'error' : 'neutral';
+        const tone = status === 'error' ? 'error' : (status === 'pending' ? 'neutral' : 'neutral');
         this.writeGateMessage(message, tone);
     }
 
@@ -430,25 +428,17 @@ class KedrixLicense {
             if (!this.state || !this.state.email || !this.state.accessAllowed) return;
             const checkedAt = Date.parse(this.state.checkedAt || '') || 0;
             if (Date.now() - checkedAt < 1000 * 60 * 10) return;
-
-            // FIX: verifySeal() uses screen dimensions which can change on resize/zoom.
-            // Only hard-block if seal is present but clearly tampered (sig mismatch),
-            // not simply missing (e.g. first load after fix deployment).
-            if (window.KedrixLicenseGuard) {
-                const guard = window.KedrixLicenseGuard;
-                const sealRaw = localStorage.getItem('kedrix_guard_v1');
-                if (sealRaw && !guard.verifySeal()) {
-                    // Seal exists but is invalid — re-verify remotely instead of hard-locking.
-                    // This avoids false positives from screen resize / zoom / device rotation.
-                    await this.verifyRemote({
-                        email: this.state.email,
-                        testerId: this.state.testerId,
-                        silent: true
-                    });
-                    return;
-                }
+            if (window.KedrixLicenseGuard && !window.KedrixLicenseGuard.verifySeal()) {
+                this.updateState({
+                    status: 'error',
+                    message: 'Sessione beta non valida. Verifica nuovamente l’accesso.',
+                    accessAllowed: false,
+                    checkedAt: new Date().toISOString()
+                });
+                this.syncLegacyPremiumFlags(false);
+                this.showGate('error');
+                return;
             }
-
             await this.verifyRemote({
                 email: this.state.email,
                 testerId: this.state.testerId,

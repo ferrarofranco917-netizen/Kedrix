@@ -14152,7 +14152,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
   const KEDRIX_TRACKING_ENDPOINT = (window.KedrixRuntimeConfig && typeof window.KedrixRuntimeConfig.getEndpoint === 'function')
     ? window.KedrixRuntimeConfig.getEndpoint('tracking')
-    : 'https://script.google.com/macros/s/AKfycbzNS4sNBcQ-E6c4AVzIL2QdboyQIW6rXs8-oiJ9AbkTIlnOVX1SXLYPBY_PpF7pYjF_FA/exec';
+    : 'https://script.google.com/macros/s/AKfycbzgKv6VM1K--AhdtFhAuGgm7rscoQCTf7vPFljAUr6njQRP_s6oyzB_UEIG5xWi0Se_4A/exec';
 
   const normalizeEndpoint = (value) => {
     const raw = String(value || '').trim();
@@ -14162,40 +14162,24 @@ document.addEventListener("DOMContentLoaded", ()=>{
     return raw;
   };
 
-  const LEGACY_TRACKING_ENDPOINTS = new Set([
-    'https://script.google.com/macros/s/AKfycbzgKv6VM1K--AhdtFhAuGgm7rscoQCTf7vPFljAUr6njQRP_s6oyzB_UEIG5xWi0Se_4A/exec'
-  ]);
-
   const getEndpoint = () => {
-    const runtimeEndpoint = (window.KedrixRuntimeConfig && typeof window.KedrixRuntimeConfig.getEndpoint === 'function')
-      ? window.KedrixRuntimeConfig.getEndpoint('tracking')
-      : '';
-
     const candidates = [
-      runtimeEndpoint,
       window.KEDRIX_REGISTRY_ENDPOINT,
       window.KEDRIX_TRACKING_ENDPOINT,
-      document.documentElement && document.documentElement.getAttribute('data-kedrix-endpoint'),
       localStorage.getItem('kedrix_registry_endpoint'),
       localStorage.getItem('kedrix_tracking_endpoint'),
+      document.documentElement && document.documentElement.getAttribute('data-kedrix-endpoint'),
       KEDRIX_TRACKING_ENDPOINT
     ];
 
     for (const candidate of candidates) {
       const normalized = normalizeEndpoint(candidate);
-      if (!normalized) continue;
-      if (LEGACY_TRACKING_ENDPOINTS.has(normalized)) {
+      if (normalized) {
         try {
-          if (localStorage.getItem('kedrix_registry_endpoint') === normalized) localStorage.removeItem('kedrix_registry_endpoint');
-          if (localStorage.getItem('kedrix_tracking_endpoint') === normalized) localStorage.removeItem('kedrix_tracking_endpoint');
+          localStorage.setItem('kedrix_registry_endpoint', normalized);
         } catch (_err) {}
-        continue;
+        return normalized;
       }
-      try {
-        localStorage.setItem('kedrix_registry_endpoint', normalized);
-        localStorage.setItem('kedrix_tracking_endpoint', normalized);
-      } catch (_err) {}
-      return normalized;
     }
 
     return '';
@@ -14262,63 +14246,40 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const sessionId = sessionStorage.getItem('kedrix_session_id') || '';
       const licenseEmail = localStorage.getItem('license_email') || '';
 
-      const basePayload = {
-        origin: 'kedrix_app',
-        tester_id: testerId,
-        session_id: sessionId,
-        email: licenseEmail,
-        version: build,
-        channel,
-        lang: language
+      const payload = {
+        source: 'kedrix_app',
+        reason: eventName,
+        syncedAt: new Date().toISOString(),
+        record: {
+          testerId,
+          sessionId,
+          licenseEmail,
+          build,
+          channel,
+          language,
+          firstSeenAt: localStorage.getItem('first_seen_at') || '',
+          lastSeenAt: new Date().toISOString(),
+          launchCount: Number(localStorage.getItem('launch_count') || 0),
+          feedbackCount: Number(localStorage.getItem('feedback_count') || 0),
+          device: {
+            standalone: window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true,
+            screen: `${window.screen.width}x${window.screen.height}`,
+            viewport: `${window.innerWidth}x${window.innerHeight}`,
+            platform: navigator.platform || '',
+            deviceFamily: /mobile/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
+            osFamily: navigator.userAgent || '',
+            browserFamily: navigator.userAgent || '',
+            ua: navigator.userAgent || ''
+          },
+          primaAzioneCompletata: localStorage.getItem('prima_azione') || 'no',
+          tempoPrimoValore: localStorage.getItem('tempo_primo_valore') || '',
+          tipoFeedback: extra.tipoFeedback || '',
+          qualitaFeedback: extra.qualitaFeedback || '',
+          categoriaFeedback: extra.categoriaFeedback || '',
+          messaggioFeedback: extra.messaggioFeedback || '',
+          attritoRilevato: extra.attritoRilevato || ''
+        }
       };
-
-      const payload = (eventName === 'feedback_inviato')
-        ? {
-            action: 'feedback',
-            ...basePayload,
-            tester_id: testerId,
-            type: extra.tipoFeedback || 'generale',
-            quality: extra.qualitaFeedback || 'media',
-            category: extra.categoriaFeedback || 'valore',
-            message: extra.messaggioFeedback || ''
-          }
-        : {
-            action: 'track',
-            ...basePayload,
-            event: eventName,
-            source: 'kedrix_app',
-            reason: eventName,
-            syncedAt: new Date().toISOString(),
-            record: {
-              testerId,
-              sessionId,
-              licenseEmail,
-              build,
-              channel,
-              language,
-              firstSeenAt: localStorage.getItem('first_seen_at') || '',
-              lastSeenAt: new Date().toISOString(),
-              launchCount: Number(localStorage.getItem('launch_count') || 0),
-              feedbackCount: Number(localStorage.getItem('feedback_count') || 0),
-              device: {
-                standalone: window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true,
-                screen: `${window.screen.width}x${window.screen.height}`,
-                viewport: `${window.innerWidth}x${window.innerHeight}`,
-                platform: navigator.platform || '',
-                deviceFamily: /mobile/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
-                osFamily: navigator.userAgent || '',
-                browserFamily: navigator.userAgent || '',
-                ua: navigator.userAgent || ''
-              },
-              primaAzioneCompletata: localStorage.getItem('prima_azione') || 'no',
-              tempoPrimoValore: localStorage.getItem('tempo_primo_valore') || '',
-              tipoFeedback: extra.tipoFeedback || '',
-              qualitaFeedback: extra.qualitaFeedback || '',
-              categoriaFeedback: extra.categoriaFeedback || '',
-              messaggioFeedback: extra.messaggioFeedback || '',
-              attritoRilevato: extra.attritoRilevato || ''
-            }
-          };
 
       return await safeFetch(endpoint, payload);
     } catch (e) {

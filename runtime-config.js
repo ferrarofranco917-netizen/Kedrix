@@ -1,6 +1,4 @@
 (function (global) {
-  const FORCED_ENDPOINT = 'https://script.google.com/macros/s/AKfycbz89cWPWlNihcLw9jpZpwgTBtcLb99u4m9wvjjEhL-zzVr3TkNpc6wCNl_wvi42gqEZ/exec';
-
   const CONFIG = {
     build: '20260322_refactor_i18n_v1a',
     channel: 'beta',
@@ -8,8 +6,8 @@
     serviceWorkerPath: './sw.js',
     scope: './',
     endpoints: {
-      registry: FORCED_ENDPOINT,
-      tracking: FORCED_ENDPOINT
+      registry: 'https://script.google.com/macros/s/AKfycbzgKv6VM1K--AhdtFhAuGgm7rscoQCTf7vPFljAUr6njQRP_s6oyzB_UEIG5xWi0Se_4A/exec',
+      tracking: 'https://script.google.com/macros/s/AKfycbzgKv6VM1K--AhdtFhAuGgm7rscoQCTf7vPFljAUr6njQRP_s6oyzB_UEIG5xWi0Se_4A/exec'
     }
   };
 
@@ -22,9 +20,13 @@
     }
   }
 
-  function clearLegacyStorage() {
-    try { localStorage.removeItem('kedrix_registry_endpoint'); } catch (_err) {}
-    try { localStorage.removeItem('kedrix_tracking_endpoint'); } catch (_err) {}
+  function readStorage(key) {
+    try {
+      const value = localStorage.getItem(key);
+      return value ? String(value).trim() : '';
+    } catch (_err) {
+      return '';
+    }
   }
 
   const api = {
@@ -41,10 +43,28 @@
       return `${CONFIG.serviceWorkerPath}?v=${CONFIG.serviceWorkerVersion}`;
     },
     getEndpoint(kind) {
-      clearLegacyStorage();
       const normalizedKind = String(kind || '').trim().toLowerCase();
-      if (!normalizedKind) return FORCED_ENDPOINT;
-      return CONFIG.endpoints[normalizedKind] || FORCED_ENDPOINT;
+      if (!normalizedKind) return '';
+
+      const storageKeys = {
+        registry: ['kedrix_registry_endpoint'],
+        tracking: ['kedrix_tracking_endpoint', 'kedrix_registry_endpoint']
+      };
+      const metaKeys = {
+        registry: 'kedrix-beta-registry-endpoint',
+        tracking: 'kedrix-tracking-endpoint'
+      };
+
+      const storageCandidates = storageKeys[normalizedKind] || [];
+      for (const key of storageCandidates) {
+        const value = readStorage(key);
+        if (value) return value;
+      }
+
+      const metaValue = readMeta(metaKeys[normalizedKind] || '');
+      if (metaValue) return metaValue;
+
+      return CONFIG.endpoints[normalizedKind] || '';
     }
   };
 

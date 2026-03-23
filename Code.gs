@@ -8,49 +8,12 @@ const LICENSES_SHEET_NAME = 'LICENSES';
 const BETA_REQUESTS_SHEET_NAME = 'BETA_REQUESTS';
 const SPREADSHEET_ID = '1-dCY39nipXvI8E9ujnwnGTyy_2Oo0cncwatB3gDJGOk';
 
-const TRACKING_ACTION_ALIASES = {
-  'track_event': 'tracking',
-  'tracking': 'tracking',
-  'track': 'tracking',
-  'event': 'tracking',
-  'register_beta_request': 'register_beta_request',
-  'beta_request': 'register_beta_request',
-  'request_beta_access': 'register_beta_request',
-  'check_license': 'check_license',
-  'license': 'check_license',
-  'activate_license': 'check_license',
-  'license_check': 'check_license'
-};
-
-const TRACKING_ANONYMOUS_ALLOWLIST = {
-  'feedback_inviato': true,
-  'beta_request_submitted': true,
-  'activation_started': true,
-  'first_action_done': true,
-  'time_to_first_action': true
-};
-
-const TRACKING_TECHNICAL_EVENTS = {
-  'errore': true,
-  'error': true,
-  'service_worker_error': true,
-  'network_error': true
-};
-
-const TRACKING_FORCE_SYNC_EVENTS = {
-  'feedback_inviato': true,
-  'prima_azione_completata': true,
-  'app_installata': true
-};
-
-const HEAVY_SYNC_MIN_INTERVAL_MS = 10 * 60 * 1000;
-
 function doGet(e) {
   try {
     const params = (e && e.parameter) || {};
     const action = safeStr_(params.action || 'health').toLowerCase();
 
-    if (action === 'check_license' || action === 'license' || action === 'activate_license') {
+    if (action === 'check_license') {
       const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
       return jsonResponse_(checkLicenseAction_({
         email: params.email || '',
@@ -74,14 +37,14 @@ function doGet(e) {
 function doPost(e) {
   try {
     const payload = parsePayload_(e);
-    const action = resolveAction_(payload);
+    const action = safeStr_(payload.action || payload.type || '').toLowerCase();
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
 
     if (action === 'register_beta_request') {
       return jsonResponse_(registerBetaRequestAction_(payload, ss));
     }
 
-    if (action === 'check_license' || action === 'license' || action === 'activate_license') {
+    if (action === 'check_license') {
       return jsonResponse_(checkLicenseAction_(payload, ss));
     }
 
@@ -111,27 +74,15 @@ function handleTrackingAction_(payload, ss) {
   const device = normalizeDevicePayload_(record.device || {});
 
   const testerId = safeStr_(record.testerId);
-  const reason = normalizeReason_(record.reason || payload.reason || payload.event || 'app_aperta');
+  const reason = safeStr_(record.reason || payload.reason || payload.event || 'app_aperta');
   const syncedAt = safeStr_(record.syncedAt || payload.syncedAt || payload.timestamp);
   const sessionId = safeStr_(record.sessionId);
   const licenseEmail = normalizeEmail_(record.licenseEmail);
   const now = new Date();
   const eventName = mapEventName_(reason);
-  const trackingGroup = classifyTrackingGroup_(reason);
-  const hasIdentity = !!(testerId || licenseEmail);
 
-  if (shouldIgnoreTrackingEvent_(reason, testerId, licenseEmail, sessionId)) {
-    return {
-      ok: true,
-      skipped: true,
-      ignored: true,
-      reason: 'anonymous_noise_filtered',
-      tracking_group: trackingGroup
-    };
-  }
-
-  if (isDuplicateRecent_(rawSheet, testerId || licenseEmail || sessionId, reason, syncedAt, sessionId)) {
-    return { ok: true, skipped: true, duplicate: true, tracking_group: trackingGroup };
+  if (isDuplicateRecent_(rawSheet, testerId, reason, syncedAt, sessionId)) {
+    return { ok: true, skipped: true, duplicate: true };
   }
 
   rawSheet.appendRow([
@@ -156,17 +107,12 @@ function handleTrackingAction_(payload, ss) {
     safeStr_(device.osFamily),
     safeStr_(device.browserFamily),
     safeStr_(device.ua),
-    JSON.stringify({
-      ...payload,
-      tracking_group: trackingGroup,
-      normalized_reason: reason,
-      has_identity: hasIdentity
-    })
+    JSON.stringify(payload)
   ]);
 
   eventsSheet.appendRow([
     now,
-    testerId || licenseEmail || '',
+    testerId,
     eventName,
     eventValueFromRecord_(record, reason),
     safeStr_(record.build),
@@ -182,7 +128,7 @@ function handleTrackingAction_(payload, ss) {
   if (isFeedbackReason_(reason)) {
     feedbackSheet.appendRow([
       now,
-      testerId || licenseEmail || '',
+      testerId,
       safeStr_(record.tipoFeedback) || 'feedback_app',
       safeStr_(record.messaggioFeedback),
       safeStr_(record.qualitaFeedback) || inferFeedbackQuality_(record),
@@ -199,12 +145,8 @@ function handleTrackingAction_(payload, ss) {
     });
   }
 
-  const heavySync = shouldRunHeavySync_(reason);
-  if (heavySync) {
-    syncTesterCrmFromRegistro_(ss);
-    syncKpiFromCrm_(ss);
-  }
-
+  syncTesterCrmFromRegistro_(ss);
+  syncKpiFromCrm_(ss);
   SpreadsheetApp.flush();
 
   return {
@@ -215,9 +157,7 @@ function handleTrackingAction_(payload, ss) {
     kpi_sheet: KPI_SHEET_NAME,
     event_sheet: EVENTS_SHEET_NAME,
     feedback_sheet: FEEDBACK_SHEET_NAME,
-    licenses_sheet: LICENSES_SHEET_NAME,
-    tracking_group: trackingGroup,
-    heavy_sync: heavySync
+    licenses_sheet: LICENSES_SHEET_NAME
   };
 }
 
@@ -570,59 +510,6 @@ function ensureBetaRequestsHeader_(sheet) {
     sheet.insertRowBefore(1);
     sheet.getRange(1, 1, 1, expected.length).setValues([expected]);
   }
-}
-
-
-function resolveAction_(payload) {
-  const rawAction = safeStr_((payload && (payload.action || payload.type || payload.eventType)) || '').toLowerCase();
-  return TRACKING_ACTION_ALIASES[rawAction] || 'tracking';
-}
-
-function normalizeReason_(value) {
-  return safeStr_(value).trim().toLowerCase().replace(/\s+/g, '_');
-}
-
-function classifyTrackingGroup_(reason) {
-  const normalized = normalizeReason_(reason);
-  if (TRACKING_TECHNICAL_EVENTS[normalized]) return 'technical';
-  if (isFeedbackReason_(normalized)) return 'feedback';
-  if (normalized.indexOf('license') !== -1 || normalized.indexOf('activation') !== -1) return 'activation';
-  return 'product';
-}
-
-function shouldIgnoreTrackingEvent_(reason, testerId, licenseEmail, sessionId) {
-  const normalized = normalizeReason_(reason);
-  if (testerId || licenseEmail) return false;
-  if (!sessionId && !TRACKING_ANONYMOUS_ALLOWLIST[normalized]) return true;
-  if (TRACKING_ANONYMOUS_ALLOWLIST[normalized]) return false;
-  return true;
-}
-
-function shouldRunHeavySync_(reason) {
-  const normalized = normalizeReason_(reason);
-  if (TRACKING_FORCE_SYNC_EVENTS[normalized]) {
-    setLastHeavySyncAt_(new Date());
-    return true;
-  }
-
-  const lastSyncAt = getLastHeavySyncAt_();
-  const now = Date.now();
-  if (!lastSyncAt || (now - lastSyncAt.getTime()) >= HEAVY_SYNC_MIN_INTERVAL_MS) {
-    setLastHeavySyncAt_(new Date(now));
-    return true;
-  }
-  return false;
-}
-
-function getLastHeavySyncAt_() {
-  const value = PropertiesService.getScriptProperties().getProperty('kedrix_last_heavy_sync_at');
-  if (!value) return null;
-  const parsed = parseDate_(value);
-  return parsed || null;
-}
-
-function setLastHeavySyncAt_(date) {
-  PropertiesService.getScriptProperties().setProperty('kedrix_last_heavy_sync_at', date.toISOString());
 }
 
 function isDuplicateRecent_(sheet, testerId, reason, syncedAt, sessionId) {
