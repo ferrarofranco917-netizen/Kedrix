@@ -1,64 +1,31 @@
-const RAW_SHEET_NAME = 'REGISTRO';
-const LEGACY_RAW_SHEET_NAME = 'Registry';
-const CRM_SHEET_NAME = 'TESTER_CRM';
-const KPI_SHEET_NAME = 'KPI';
-const EVENTS_SHEET_NAME = 'EVENTI_TRACKING';
-const FEEDBACK_SHEET_NAME = 'FEEDBACK';
-const LICENSES_SHEET_NAME = 'LICENSES';
-const BETA_REQUESTS_SHEET_NAME = 'BETA_REQUESTS';
-const SPREADSHEET_ID = '1-dCY39nipXvI8E9ujnwnGTyy_2Oo0cncwatB3gDJGOk';
-
-const TRACKING_ACTION_ALIASES = {
-  'track_event': 'tracking',
-  'tracking': 'tracking',
-  'track': 'tracking',
-  'event': 'tracking',
-  'feedback': 'feedback',
-  'register_beta_request': 'register_beta_request',
-  'beta_request': 'register_beta_request',
-  'request_beta_access': 'register_beta_request',
-  'check_license': 'check_license',
-  'license_check': 'check_license',
-  'license': 'check_license',
-  'activate_license': 'check_license'
-};
-
-const TRACKING_ANONYMOUS_ALLOWLIST = {
-  'feedback_inviato': true,
-  'beta_request_submitted': true,
-  'activation_started': true,
-  'first_action_done': true,
-  'time_to_first_action': true
-};
-
-const TRACKING_TECHNICAL_EVENTS = {
-  'errore': true,
-  'error': true,
-  'service_worker_error': true,
-  'network_error': true
-};
-
-const TRACKING_FORCE_SYNC_EVENTS = {
-  'feedback_inviato': true,
-  'prima_azione_completata': true,
-  'app_installata': true
-};
-
-const HEAVY_SYNC_MIN_INTERVAL_MS = 10 * 60 * 1000;
-
 function doGet(e) {
   try {
     const params = (e && e.parameter) || {};
-    const action = safeStr_(params.action || 'health').toLowerCase();
+    const action = resolveAction_(params);
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
 
     if (action === 'check_license') {
-      const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
       return jsonResponse_(checkLicenseAction_({
-        email: params.email || '',
-        testerId: params.testerId || '',
-        licenseKey: params.licenseKey || '',
-        source: params.source || 'web'
+        email: params.email || params.user_email || '',
+        testerId: params.testerId || params.tester_id || '',
+        licenseKey: params.licenseKey || params.license_key || '',
+        source: params.source || params.origin || 'web'
       }, ss));
+    }
+
+    if (action === 'register_beta_request') {
+      return jsonResponse_(registerBetaRequestAction_({
+        email: params.email || params.user_email || '',
+        name: params.name || '',
+        reason: params.reason || '',
+        commitment: params.commitment || '',
+        source: params.source || params.origin || 'kedrix-site',
+        testerId: params.testerId || params.tester_id || ''
+      }, ss));
+    }
+
+    if (action === 'tracking' || action === 'feedback') {
+      return jsonResponse_(handleTrackingAction_(params, ss));
     }
 
     return jsonResponse_({
@@ -86,10 +53,6 @@ function doPost(e) {
       return jsonResponse_(checkLicenseAction_(payload, ss));
     }
 
-    if (action === 'feedback') {
-      return jsonResponse_(handleFeedbackAction_(payload, ss));
-    }
-
     return jsonResponse_(handleTrackingAction_(payload, ss));
   } catch (error) {
     return jsonResponse_({
@@ -99,20 +62,6 @@ function doPost(e) {
   }
 }
 
-
-function handleFeedbackAction_(payload, ss) {
-  const normalized = { ...payload, event: 'feedback_inviato', reason: 'feedback_inviato', action: 'track' };
-  normalized.record = normalized.record && typeof normalized.record === 'object' ? normalized.record : {};
-  normalized.record.tipoFeedback = firstNonEmpty_(normalized.record.tipoFeedback, payload.type, payload.tipoFeedback, 'feedback_app');
-  normalized.record.messaggioFeedback = firstNonEmpty_(normalized.record.messaggioFeedback, payload.message, payload.messaggioFeedback, '');
-  normalized.record.qualitaFeedback = firstNonEmpty_(normalized.record.qualitaFeedback, payload.quality, payload.qualitaFeedback, 'media');
-  normalized.record.categoriaFeedback = firstNonEmpty_(normalized.record.categoriaFeedback, payload.category, payload.categoriaFeedback, 'valore');
-  normalized.record.feedbackCount = firstNonEmpty_(normalized.record.feedbackCount, payload.feedbackCount, 1);
-  normalized.testerId = firstNonEmpty_(payload.tester_id, payload.testerId, payload.licenseKey);
-  normalized.sessionId = firstNonEmpty_(payload.session_id, payload.sessionId);
-  normalized.email = firstNonEmpty_(payload.email, payload.user_email, payload.licenseEmail);
-  return handleTrackingAction_(normalized, ss);
-}
 function handleTrackingAction_(payload, ss) {
   const rawSheet = getOrCreateSheet_(ss, RAW_SHEET_NAME, LEGACY_RAW_SHEET_NAME);
   ensureRegistroHeader_(rawSheet);
@@ -1001,15 +950,21 @@ function eventValueFromRecord_(record, reason) {
 }
 
 function parsePayload_(e) {
+  const params = (e && e.parameter) || {};
   const raw = (e && e.postData && e.postData.contents) || '{}';
+  let parsed = {};
+
   try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    parsed = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== 'object') parsed = {};
   } catch (_err) {
-    const params = (e && e.parameter) || {};
-    if (params && Object.keys(params).length) return params;
-    throw new Error('Payload JSON non valido');
+    parsed = {};
   }
+
+  const merged = {};
+  Object.keys(params).forEach(function(key) { merged[key] = params[key]; });
+  Object.keys(parsed).forEach(function(key) { merged[key] = parsed[key]; });
+  return merged;
 }
 
 function normalizeRecord_(payload) {
@@ -1022,20 +977,20 @@ function normalizeRecord_(payload) {
     : {};
 
   return {
-    testerId: firstNonEmpty_(sourceRecord.testerId, payload.testerId, payload.user),
-    sessionId: firstNonEmpty_(sourceRecord.sessionId, payload.sessionId, payload.session),
-    licenseEmail: firstNonEmpty_(sourceRecord.licenseEmail, payload.licenseEmail, payload.email),
-    build: firstNonEmpty_(sourceRecord.build, payload.build),
+    testerId: firstNonEmpty_(sourceRecord.testerId, payload.testerId, payload.tester_id, payload.user),
+    sessionId: firstNonEmpty_(sourceRecord.sessionId, payload.sessionId, payload.session_id, payload.session),
+    licenseEmail: firstNonEmpty_(sourceRecord.licenseEmail, payload.licenseEmail, payload.email, payload.user_email),
+    build: firstNonEmpty_(sourceRecord.build, payload.build, payload.version),
     channel: firstNonEmpty_(sourceRecord.channel, payload.channel),
-    language: firstNonEmpty_(sourceRecord.language, payload.language),
+    language: firstNonEmpty_(sourceRecord.language, payload.language, payload.lang),
     firstSeenAt: firstNonEmpty_(sourceRecord.firstSeenAt, payload.firstSeenAt),
     lastSeenAt: firstNonEmpty_(sourceRecord.lastSeenAt, payload.lastSeenAt, normalizeEventTimestamp_(payload.timestamp)),
     launchCount: firstNonEmpty_(sourceRecord.launchCount, payload.launchCount),
     feedbackCount: firstNonEmpty_(sourceRecord.feedbackCount, payload.feedbackCount),
-    tipoFeedback: firstNonEmpty_(sourceRecord.tipoFeedback, payload.tipoFeedback),
-    messaggioFeedback: firstNonEmpty_(sourceRecord.messaggioFeedback, payload.messaggioFeedback),
-    qualitaFeedback: firstNonEmpty_(sourceRecord.qualitaFeedback, payload.qualitaFeedback),
-    categoriaFeedback: firstNonEmpty_(sourceRecord.categoriaFeedback, payload.categoriaFeedback),
+    tipoFeedback: firstNonEmpty_(sourceRecord.tipoFeedback, payload.tipoFeedback, payload.type),
+    messaggioFeedback: firstNonEmpty_(sourceRecord.messaggioFeedback, payload.messaggioFeedback, payload.message),
+    qualitaFeedback: firstNonEmpty_(sourceRecord.qualitaFeedback, payload.qualitaFeedback, payload.quality),
+    categoriaFeedback: firstNonEmpty_(sourceRecord.categoriaFeedback, payload.categoriaFeedback, payload.category),
     reason: firstNonEmpty_(sourceRecord.reason, payload.reason, payload.event),
     source: firstNonEmpty_(sourceRecord.source, payload.source),
     syncedAt: firstNonEmpty_(sourceRecord.syncedAt, payload.syncedAt, normalizeEventTimestamp_(payload.timestamp)),
@@ -1050,7 +1005,7 @@ function normalizeRecord_(payload) {
       deviceFamily: firstNonEmpty_(sourceDevice.deviceFamily, payload.deviceFamily),
       osFamily: firstNonEmpty_(sourceDevice.osFamily, payload.osFamily),
       browserFamily: firstNonEmpty_(sourceDevice.browserFamily, payload.browserFamily),
-      ua: firstNonEmpty_(sourceDevice.ua, payload.ua, payload.userAgent)
+      ua: firstNonEmpty_(sourceDevice.ua, payload.ua, payload.userAgent, payload.user_agent)
     }
   };
 }

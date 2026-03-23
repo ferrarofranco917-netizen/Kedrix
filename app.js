@@ -14219,15 +14219,41 @@ document.addEventListener("DOMContentLoaded", ()=>{
     if (!url) return { ok: false, skipped: true, reason: 'missing-endpoint' };
 
     try {
-      const action = String((payload && payload.action) || '').trim();
-      const requestUrl = action ? `${url}${url.includes('?') ? '&' : '?'}action=${encodeURIComponent(action)}` : url;
-      const response = await fetch(requestUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json;charset=utf-8' },
-        body: JSON.stringify(payload),
-        keepalive: true,
+      const action = String((payload && payload.action) || 'track').trim().toLowerCase();
+      const queryUrl = new URL(url, window.location.href);
+
+      Object.entries(payload || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === '') return;
+        if (typeof value === 'object') {
+          queryUrl.searchParams.set(key, JSON.stringify(value));
+        } else {
+          queryUrl.searchParams.set(key, String(value));
+        }
+      });
+
+      if (action === 'feedback' || action === 'track' || action === 'tracking') {
+        const beaconBody = JSON.stringify(payload || {});
+        if (navigator.sendBeacon) {
+          const queued = navigator.sendBeacon(queryUrl.toString(), new Blob([beaconBody], { type: 'text/plain;charset=utf-8' }));
+          return { ok: queued, status: queued ? 202 : 0, data: { queued }, rawText: '' };
+        }
+
+        await fetch(queryUrl.toString(), {
+          method: 'POST',
+          mode: 'no-cors',
+          credentials: 'omit',
+          body: beaconBody,
+          keepalive: true
+        });
+
+        return { ok: true, status: 0, data: { queued: true }, rawText: '' };
+      }
+
+      const response = await fetch(queryUrl.toString(), {
+        method: 'GET',
         mode: 'cors',
-        credentials: 'omit'
+        credentials: 'omit',
+        cache: 'no-store'
       });
 
       const rawText = await response.text().catch(() => '');
@@ -14267,8 +14293,11 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const basePayload = {
         origin: 'kedrix_app',
         tester_id: testerId,
+        testerId,
         session_id: sessionId,
+        sessionId,
         email: licenseEmail,
+        licenseEmail,
         version: build,
         channel,
         lang: language
