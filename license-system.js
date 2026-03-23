@@ -70,11 +70,55 @@ class KedrixLicense {
         return '';
     }
 
+
+    consumeActivationContext() {
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            const hash = String(window.location.hash || '').replace(/^#/, '');
+            const hashParams = new URLSearchParams(hash.includes('=') ? hash : '');
+            const read = (...keys) => {
+                for (const key of keys) {
+                    const fromQuery = params.get(key);
+                    if (fromQuery && String(fromQuery).trim()) return String(fromQuery).trim();
+                    const fromHash = hashParams.get(key);
+                    if (fromHash && String(fromHash).trim()) return String(fromHash).trim();
+                }
+                return '';
+            };
+
+            const email = String(read('email', 'user_email', 'mail')).trim().toLowerCase();
+            const testerId = String(read('tester_id', 'testerId', 'license', 'license_key', 'licenseKey', 'activation_code', 'code', 'kdx')).trim();
+            const autoFlag = String(read('auto_license', 'autologin', 'activate', 'auto')).trim().toLowerCase();
+
+            let changed = false;
+            if (email && email !== this.state.email) {
+                this.state.email = email;
+                changed = true;
+            }
+            if (testerId && testerId !== this.state.testerId) {
+                this.state.testerId = testerId;
+                changed = true;
+            }
+
+            if (changed) {
+                localStorage.setItem(this.storage.email, this.state.email || '');
+                localStorage.setItem(this.storage.testerId, this.state.testerId || '');
+                if (this.state.email) localStorage.setItem('bw-license-email', this.state.email);
+            }
+
+            if (changed || autoFlag === '1' || autoFlag === 'true' || autoFlag === 'yes') {
+                const cleanUrl = `${window.location.pathname}${window.location.hash && !hash.includes('=') ? window.location.hash : ''}`;
+                window.history.replaceState({}, document.title, cleanUrl);
+            }
+        } catch (_err) {}
+    }
+
     async bootstrap() {
         this.injectGateStyles();
         this.renderGate();
+        this.consumeActivationContext();
 
-        if (!this.state.email) {
+        if (!this.state.email && !this.state.testerId) {
             this.showGate('missing');
             return this.state;
         }
@@ -127,11 +171,8 @@ class KedrixLicense {
             let data = apiResult ? (apiResult.data || {}) : {};
             try { data = rawText ? JSON.parse(rawText) : data; } catch (_err) { data = data || {}; }
 
-            const rawStatus = String(data.license_status || data.status || 'missing').trim().toLowerCase() || 'missing';
-            const explicitDeny = ['revoked', 'suspended', 'expired'].includes(rawStatus);
-            const fallbackAllow = !!normalizedEmail && !explicitDeny && (data.soft_allow === true || data.access_allowed === true || !Object.prototype.hasOwnProperty.call(data, 'access_allowed'));
-            const accessAllowed = !!(data.access_allowed || data.soft_allow || fallbackAllow);
-            const status = accessAllowed ? (rawStatus === 'missing' ? 'soft_allow' : (rawStatus || 'soft_allow')) : rawStatus;
+            const status = String(data.license_status || 'missing').trim() || 'missing';
+            const accessAllowed = !!data.access_allowed;
 
             this.updateState({
                 email: data.email || normalizedEmail,
@@ -168,26 +209,19 @@ class KedrixLicense {
 
             return data;
         } catch (error) {
-            const failOpenAllowed = !!normalizedEmail;
             this.updateState({
-                status: failOpenAllowed ? 'soft_allow' : 'error',
-                message: failOpenAllowed
-                    ? 'Accesso beta consentito in modalità fallback. La verifica remota non è disponibile.'
-                    : 'Impossibile verificare la licenza beta. Controlla la connessione e riprova.',
-                accessAllowed: failOpenAllowed,
+                status: 'error',
+                message: 'Impossibile verificare la licenza beta. Controlla la connessione e riprova.',
+                accessAllowed: false,
                 checkedAt: new Date().toISOString()
             });
-            this.syncLegacyPremiumFlags(failOpenAllowed);
-            if (failOpenAllowed) {
-                this.hideGate();
-            } else {
-                if (window.KedrixLicenseGuard && window.KedrixLicenseGuard.softInvalidate) {
-                    window.KedrixLicenseGuard.softInvalidate('network_error');
-                }
-                this.showGate('error');
-                this.writeGateMessage(this.state.message);
+            this.syncLegacyPremiumFlags(false);
+            if (window.KedrixLicenseGuard && window.KedrixLicenseGuard.softInvalidate) {
+                window.KedrixLicenseGuard.softInvalidate('network_error');
             }
-            return { ok: failOpenAllowed, reason: failOpenAllowed ? 'soft_allow' : 'network_error', access_allowed: failOpenAllowed, soft_allow: failOpenAllowed, error: String(error && error.message ? error.message : error) };
+            this.showGate('error');
+            this.writeGateMessage(this.state.message);
+            return { ok: false, reason: 'network_error', error: String(error && error.message ? error.message : error) };
         } finally {
             this.setGateLoading(false);
         }
@@ -276,7 +310,6 @@ class KedrixLicense {
     messageForStatus(status) {
         const messages = {
             active: 'Accesso beta attivo.',
-            soft_allow: 'Accesso beta consentito in modalità fallback.',
             pending: 'Richiesta ricevuta. L’accesso verrà attivato appena il tuo batch sarà aperto.',
             expired: 'La tua licenza beta è scaduta.',
             revoked: 'Il tuo accesso è stato revocato.',

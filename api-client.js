@@ -18,10 +18,12 @@
       const action = String(raw.action || '').trim().toLowerCase();
       const normalized = { ...raw };
 
+      if (action === 'beta_request') {
+        normalized.action = 'register_beta_request';
+      }
+
       if (action === 'activate_license') {
         normalized.action = 'check_license';
-      } else if (action === 'beta_request') {
-        normalized.action = 'register_beta_request';
       }
 
       if (normalized.email && !normalized.user_email) normalized.user_email = normalized.email;

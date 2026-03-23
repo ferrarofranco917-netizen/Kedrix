@@ -18,8 +18,8 @@ const TRACKING_ACTION_ALIASES = {
   'request_beta_access': 'register_beta_request',
   'check_license': 'check_license',
   'license_check': 'check_license',
-  'license': 'check_license',
-  'activate_license': 'check_license'
+  'activate_license': 'check_license',
+  'license': 'check_license'
 };
 
 const TRACKING_ANONYMOUS_ALLOWLIST = {
@@ -48,7 +48,7 @@ const HEAVY_SYNC_MIN_INTERVAL_MS = 10 * 60 * 1000;
 function doGet(e) {
   try {
     const params = (e && e.parameter) || {};
-    const action = TRACKING_ACTION_ALIASES[safeStr_(params.action || 'health').toLowerCase()] || safeStr_(params.action || 'health').toLowerCase();
+    const action = safeStr_(params.action || 'health').toLowerCase();
 
     if (action === 'check_license') {
       const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -319,6 +319,7 @@ function registerBetaRequestAction_(payload, ss) {
     status: 'pending',
     tester_id: testerId,
     email: email,
+    activation_url: 'https://kedrix-base-beta-978311.gitlab.io/?email=' + encodeURIComponent(email) + '&tester_id=' + encodeURIComponent(testerId) + '&auto_license=1',
     message: 'Richiesta beta registrata correttamente'
   };
 }
@@ -327,57 +328,65 @@ function checkLicenseAction_(payload, ss) {
   const licensesSheet = getOrCreateSheet_(ss, LICENSES_SHEET_NAME);
   ensureLicensesHeader_(licensesSheet);
 
-  const email = normalizeEmail_(payload.email || payload.licenseEmail || '');
-  const testerId = safeStr_(payload.testerId || payload.licenseKey || '');
-
-  const found = findLicenseRow_(licensesSheet, { email: email, testerId: testerId });
+  const email = normalizeEmail_(payload.email || payload.licenseEmail || payload.user_email || '');
+  const testerId = safeStr_(payload.testerId || payload.tester_id || payload.licenseKey || payload.license_key || '');
   const now = new Date();
 
-  if (!found.rowIndex) {
-    const softTesterId = testerId || generateTesterId_();
-    licensesSheet.appendRow([
-      softTesterId,
-      email,
-      'soft_allow',
-      'beta',
-      now,
-      '',
-      '',
-      'no',
-      now,
-      now,
-      'Auto-created by beta fallback',
-      safeStr_(payload.source || 'kedrix-app'),
-      '',
-      now,
-      now
-    ]);
+  const found = findLicenseRow_(licensesSheet, { email: email, testerId: testerId });
 
+  if (!found.rowIndex) {
     return {
-      ok: true,
+      ok: false,
       action: 'check_license',
-      access_allowed: true,
-      soft_allow: true,
-      license_status: 'soft_allow',
-      tester_id: softTesterId,
+      license_status: 'missing',
+      reason: 'license_not_found',
+      access_allowed: false,
       email: email,
-      license_type: 'beta',
-      batch: '',
-      expires_at: '',
-      activated_at: normalizeDateOutput_(now),
-      role: 'tester',
-      message: 'Accesso beta consentito in modalità fallback.'
+      tester_id: testerId,
+      message: licenseMessage_('missing')
     };
   }
 
   const rowIndex = found.rowIndex;
-  const license = found.license;
-  const status = resolveLicenseStatus_(license, now);
-  const allowed = status === 'active' || status === 'soft_allow';
+  const license = found.license || {};
+  let status = resolveLicenseStatus_(license, now);
+  const normalizedEmail = normalizeEmail_(license.email || '');
+  const normalizedTesterId = safeStr_(license.tester_id || '');
+  const exactEmailMatch = !!email && normalizedEmail === email;
+  const exactTesterMatch = !!testerId && normalizedTesterId === testerId;
 
-  licensesSheet.getRange(rowIndex, 10).setValue(now);
-  licensesSheet.getRange(rowIndex, 15).setValue(now);
-  if (allowed) licensesSheet.getRange(rowIndex, 9).setValue(now);
+  if (status === 'pending' && exactTesterMatch && (!email || exactEmailMatch)) {
+    const activationDate = license.data_attivazione || now;
+    const expiryDate = license.data_scadenza || new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    licensesSheet.getRange(rowIndex, 3).setValue('active');
+    licensesSheet.getRange(rowIndex, 5).setValue(activationDate);
+    licensesSheet.getRange(rowIndex, 6).setValue(expiryDate);
+    licensesSheet.getRange(rowIndex, 9).setValue(now);
+    licensesSheet.getRange(rowIndex, 10).setValue(now);
+    licensesSheet.getRange(rowIndex, 15).setValue(now);
+
+    if (email && !normalizedEmail) {
+      licensesSheet.getRange(rowIndex, 2).setValue(email);
+    }
+
+    status = 'active';
+    license.stato = 'active';
+    license.data_attivazione = activationDate;
+    license.data_scadenza = expiryDate;
+    license.ultimo_accesso = now;
+    license.ultimo_check = now;
+    license.updated_at = now;
+    if (email && !normalizedEmail) license.email = email;
+  } else {
+    licensesSheet.getRange(rowIndex, 10).setValue(now);
+    licensesSheet.getRange(rowIndex, 15).setValue(now);
+    if (status === 'active') {
+      licensesSheet.getRange(rowIndex, 9).setValue(now);
+    }
+  }
+
+  const allowed = status === 'active';
 
   return {
     ok: allowed,
@@ -391,7 +400,8 @@ function checkLicenseAction_(payload, ss) {
     expires_at: normalizeDateOutput_(license.data_scadenza),
     activated_at: normalizeDateOutput_(license.data_attivazione),
     role: mapRoleFromLicenseType_(license.tipo_licenza),
-    message: licenseMessage_(status)
+    message: licenseMessage_(status),
+    auto_activated: status === 'active' && exactTesterMatch
   };
 }
 
@@ -1205,9 +1215,8 @@ function resolveLicenseStatus_(license, now) {
   }
 
   if (explicitStatus === 'active') return 'active';
-  if (explicitStatus === 'soft_allow') return 'soft_allow';
   if (explicitStatus === 'expired') return 'expired';
-  return 'soft_allow';
+  return 'missing';
 }
 
 function mapRoleFromLicenseType_(licenseType) {
