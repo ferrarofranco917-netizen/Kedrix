@@ -14243,7 +14243,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       const build = (typeof KEDRIX_BUILD !== 'undefined' && KEDRIX_BUILD) || (app && app.build) || 'unknown';
       const channel = (typeof KEDRIX_RELEASE_CHANNEL !== 'undefined' && KEDRIX_RELEASE_CHANNEL) || 'beta';
       const testerId = localStorage.getItem('tester_id') || '';
-      const sessionId = sessionStorage.getItem('kedrix_session_id') || '';
+      const sessionId = getSessionId() || localStorage.getItem('tester_id') || ''; // unified via KedrixSessionManager
       const licenseEmail = localStorage.getItem('license_email') || '';
 
       const payload = {
@@ -14289,10 +14289,16 @@ document.addEventListener("DOMContentLoaded", ()=>{
   }
 
   function ensureSessionId() {
-    if (!sessionStorage.getItem('kedrix_session_id')) {
-      const id = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      sessionStorage.setItem('kedrix_session_id', id);
-    }
+    const existing = getSessionId();
+    if (existing) return existing;
+
+    try {
+      if (window.KedrixSessionManager && typeof window.KedrixSessionManager.getSessionId === 'function') {
+        return window.KedrixSessionManager.getSessionId();
+      }
+    } catch (_e) {}
+
+    return '';
   }
 
   function markFirstActionCompleted() {
