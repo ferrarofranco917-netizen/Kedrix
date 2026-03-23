@@ -1,32 +1,37 @@
 (function(global){
   const STORAGE_KEY = 'kedrix_guard_v1';
+
   function safeHash(input){
     let h = 2166136261;
-    for (let i=0;i<input.length;i++){
+    for (let i = 0; i < input.length; i++){
       h ^= input.charCodeAt(i);
       h += (h<<1) + (h<<4) + (h<<7) + (h<<8) + (h<<24);
     }
     return ('0000000' + (h>>>0).toString(16)).slice(-8);
   }
+
   function computeFingerprint(){
+    // FIX: removed screen.width / screen.height — these change on resize, zoom,
+    // and device rotation, causing verifySeal() to return false for legitimate users
+    // and triggering spurious heartbeat lock-outs.
     const parts = [
       navigator.userAgent || '',
       navigator.language || '',
-      String(screen.width || ''),
-      String(screen.height || ''),
       Intl.DateTimeFormat().resolvedOptions().timeZone || '',
       navigator.platform || ''
     ];
     return safeHash(parts.join('|'));
   }
+
   function sign(payload){
     return safeHash(JSON.stringify(payload) + '::kedrix-beta-v1');
   }
+
   const guard = {
     getFingerprint(){ return computeFingerprint(); },
     sign,
     sealLicense(state){
-      const sealed = { 
+      const sealed = {
         email: state.email || '',
         testerId: state.testerId || '',
         status: state.status || '',
@@ -50,5 +55,6 @@
       localStorage.setItem('bw-license-valid', 'invalid');
     }
   };
+
   global.KedrixLicenseGuard = guard;
 })(window);

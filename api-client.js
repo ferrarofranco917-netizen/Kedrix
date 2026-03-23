@@ -15,8 +15,10 @@
     },
     normalizePayload(payload = {}, meta = {}){
       const raw = { ...payload, _meta: API.buildMeta(meta) };
-      const action = String(raw.action || '').trim().toLowerCase();
       const normalized = { ...raw };
+
+      // NOTE: do NOT remap action here — the GAS backend routes on the original action name.
+      // Remapping 'check_license' → 'license' breaks the license check (GAS has no 'license' route).
 
       if (normalized.email && !normalized.user_email) normalized.user_email = normalized.email;
       if (normalized.testerId && !normalized.tester_id) normalized.tester_id = normalized.testerId;
