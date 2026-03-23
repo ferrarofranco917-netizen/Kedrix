@@ -14152,7 +14152,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
 
   const KEDRIX_TRACKING_ENDPOINT = (window.KedrixRuntimeConfig && typeof window.KedrixRuntimeConfig.getEndpoint === 'function')
     ? window.KedrixRuntimeConfig.getEndpoint('tracking')
-    : 'https://script.google.com/macros/s/AKfycbzgKv6VM1K--AhdtFhAuGgm7rscoQCTf7vPFljAUr6njQRP_s6oyzB_UEIG5xWi0Se_4A/exec';
+    : 'https://script.google.com/macros/s/AKfycbxNM0y7ohRqW3r5c4rUP3chtvf-e-0fe3KHuZ04nLmmQzCxz4WaYy1OmATcHw08CWqG/exec';
 
   const normalizeEndpoint = (value) => {
     const raw = String(value || '').trim();
@@ -14177,6 +14177,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
       if (normalized) {
         try {
           localStorage.setItem('kedrix_registry_endpoint', normalized);
+          localStorage.setItem('kedrix_tracking_endpoint', normalized);
         } catch (_err) {}
         return normalized;
       }

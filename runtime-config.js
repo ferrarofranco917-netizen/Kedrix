@@ -6,8 +6,8 @@
     serviceWorkerPath: './sw.js',
     scope: './',
     endpoints: {
-      registry: 'https://script.google.com/macros/s/AKfycbzgKv6VM1K--AhdtFhAuGgm7rscoQCTf7vPFljAUr6njQRP_s6oyzB_UEIG5xWi0Se_4A/exec',
-      tracking: 'https://script.google.com/macros/s/AKfycbzgKv6VM1K--AhdtFhAuGgm7rscoQCTf7vPFljAUr6njQRP_s6oyzB_UEIG5xWi0Se_4A/exec'
+      registry: 'https://script.google.com/macros/s/AKfycbxNM0y7ohRqW3r5c4rUP3chtvf-e-0fe3KHuZ04nLmmQzCxz4WaYy1OmATcHw08CWqG/exec',
+      tracking: 'https://script.google.com/macros/s/AKfycbxNM0y7ohRqW3r5c4rUP3chtvf-e-0fe3KHuZ04nLmmQzCxz4WaYy1OmATcHw08CWqG/exec'
     }
   };
 
@@ -55,18 +55,26 @@
         tracking: 'kedrix-tracking-endpoint'
       };
 
+      const metaValue = readMeta(metaKeys[normalizedKind] || '');
+      if (metaValue) return metaValue;
+
       const storageCandidates = storageKeys[normalizedKind] || [];
       for (const key of storageCandidates) {
         const value = readStorage(key);
         if (value) return value;
       }
 
-      const metaValue = readMeta(metaKeys[normalizedKind] || '');
-      if (metaValue) return metaValue;
-
       return CONFIG.endpoints[normalizedKind] || '';
     }
   };
+
+
+  try {
+    const registryMeta = api.getEndpoint('registry');
+    const trackingMeta = api.getEndpoint('tracking');
+    if (registryMeta) localStorage.setItem('kedrix_registry_endpoint', registryMeta);
+    if (trackingMeta) localStorage.setItem('kedrix_tracking_endpoint', trackingMeta);
+  } catch (_err) {}
 
   global.KedrixRuntimeConfig = api;
 })(window);
