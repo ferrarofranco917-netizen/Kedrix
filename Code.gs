@@ -11,14 +11,14 @@ const SPREADSHEET_ID = '1-dCY39nipXvI8E9ujnwnGTyy_2Oo0cncwatB3gDJGOk';
 function doGet(e) {
   try {
     const params = (e && e.parameter) || {};
-    const action = safeStr_(params.action || 'health').toLowerCase();
+    const action = normalizeAction_(params.action || 'health');
 
     if (action === 'check_license') {
       const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
       return jsonResponse_(checkLicenseAction_({
-        email: params.email || '',
-        testerId: params.testerId || '',
-        licenseKey: params.licenseKey || '',
+        email: params.email || params.user_email || '',
+        testerId: params.testerId || params.tester_id || '',
+        licenseKey: params.licenseKey || params.license_key || '',
         source: params.source || 'web'
       }, ss));
     }
@@ -37,7 +37,7 @@ function doGet(e) {
 function doPost(e) {
   try {
     const payload = parsePayload_(e);
-    const action = safeStr_(payload.action || payload.type || '').toLowerCase();
+    const action = normalizeAction_(payload.action || payload.type || payload.event || '');
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
 
     if (action === 'register_beta_request') {
@@ -306,6 +306,20 @@ function checkLicenseAction_(payload, ss) {
     role: mapRoleFromLicenseType_(license.tipo_licenza),
     message: licenseMessage_(status)
   };
+}
+
+
+function normalizeAction_(value) {
+  const action = safeStr_(value).toLowerCase();
+  const aliases = {
+    license: 'check_license',
+    activate_license: 'check_license',
+    beta_request: 'register_beta_request',
+    track: 'tracking',
+    track_event: 'tracking',
+    feedback: 'tracking'
+  };
+  return aliases[action] || action;
 }
 
 function getOrCreateSheet_(ss, primaryName, legacyName) {

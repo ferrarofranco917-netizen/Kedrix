@@ -112,7 +112,9 @@ class KedrixLicense {
                     action: 'check_license',
                     email: normalizedEmail,
                     testerId: normalizedTesterId,
+                    tester_id: normalizedTesterId,
                     licenseKey: normalizedTesterId,
+                    license_key: normalizedTesterId,
                     source: 'kedrix-app',
                     client_sig: (window.KedrixLicenseGuard && window.KedrixLicenseGuard.sign)
                         ? window.KedrixLicenseGuard.sign({ email: normalizedEmail, testerId: normalizedTesterId })
@@ -123,9 +125,8 @@ class KedrixLicense {
                 ? await window.KedrixAPI.request(this.endpoint, payload, { meta: { route: 'check_license' } })
                 : null;
 
-            const rawText = apiResult ? apiResult.raw : '';
             let data = apiResult ? (apiResult.data || {}) : {};
-            try { data = rawText ? JSON.parse(rawText) : data; } catch (_err) { data = data || {}; }
+            if (!data || typeof data !== 'object') data = {};
 
             const status = String(data.license_status || 'missing').trim() || 'missing';
             const accessAllowed = !!data.access_allowed;
